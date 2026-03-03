@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Continuum</h1>
+      <p id="status">Checking backend...</p>
+
+      <section class="card">
+        <h2>Current Tab Session</h2>
+        <div id="sessionMeta">No active session yet.</div>
+        <div class="buttonRow wrapButtons">
+          <button id="generateBtn">Generate Docs</button>
+          <button id="automationBtn">Automation Ideas</button>
+          <button id="screenshotBtn">Capture Screenshot</button>
+          <button id="startMeetingBtn">Start Meeting</button>
+          <button id="stopMeetingBtn">Stop Meeting</button>
+          <button id="settingsBtn">Settings</button>
+        </div>
+        <div id="meetingStatus" class="subtle">Meeting status: idle</div>
+      </section>
+
+      <section class="card">
+        <h2>Search Existing Docs</h2>
+        <input id="searchInput" type="text" placeholder="Search docs..." />
+        <button id="searchBtn">Search</button>
+        <div id="searchResults"></div>
+      </section>
+
+      <section class="card">
+        <h2>Latest Screenshot</h2>
+        <div id="latestScreenshot">No screenshot captured yet.</div>
+      </section>
+
+      <section class="card">
+        <h2>Latest Draft</h2>
+        <div id="latestDraft">No draft loaded yet.</div>
+      </section>
+
+      <section class="card">
+        <h2>Latest Meeting</h2>
+        <div id="latestMeeting">No meeting captured yet.</div>
+      </section>
+
+      <section class="card">
+        <h2>Automation Suggestions</h2>
+        <div id="automationResults">No suggestions yet.</div>
+      </section>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

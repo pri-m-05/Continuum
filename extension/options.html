@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Continuum Options</h1>
+
+      <section class="card">
+        <label for="backendBaseUrl">Backend URL</label>
+        <input id="backendBaseUrl" type="text" placeholder="http://127.0.0.1:8000" />
+      </section>
+
+      <section class="card">
+        <h2>Required Sections</h2>
+        <p>One per line.</p>
+        <textarea id="requiredSections"></textarea>
+      </section>
+
+      <section class="card">
+        <h2>Required Keywords</h2>
+        <p>One per line.</p>
+        <textarea id="requiredKeywords"></textarea>
+      </section>
+
+      <section class="card">
+        <h2>Prohibited Words</h2>
+        <p>One per line.</p>
+        <textarea id="prohibitedWords"></textarea>
+      </section>
+
+      <section class="card">
+        <label>
+          <input id="captureInputValues" type="checkbox" />
+          Capture safe input previews
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Server-side note</h2>
+        <p>
+          For real meeting transcription and follow-up notes, set
+          <code>OPENAI_API_KEY</code> on the backend server.
+        </p>
+      </section>
+
+      <button id="saveBtn">Save Settings</button>
+      <p id="status"></p>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

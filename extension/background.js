@@ -1,27 +1,7 @@
-/*
-  CONTINUUM BACKGROUND SERVICE WORKER
-
-  WHAT THIS FILE DOES
-  1. Receives captured browser actions from the content script
-  2. Manages one workflow session per active tab/url context
-  3. Flushes captured actions to the backend
-  4. Captures screenshots
-  5. Starts/stops meeting recording using an offscreen document
-  6. Caches the latest doc result and latest meeting result
-  7. Acts as the single message router for popup/content/offscreen
-
-*/
-
 const DEFAULT_SETTINGS = {
   backendBaseUrl: "http://127.0.0.1:8000",
   auditRules: {
-    required_sections: [
-      "Purpose",
-      "Preconditions",
-      "Procedure",
-      "Controls",
-      "Evidence"
-    ],
+    required_sections: ["Purpose", "Preconditions", "Procedure", "Controls", "Evidence"],
     required_keywords: [],
     prohibited_words: []
   },
@@ -33,107 +13,54 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (!existing.continuum_settings) {
     await storageSet("sync", { continuum_settings: DEFAULT_SETTINGS });
   }
+
+  if (chrome.sidePanel?.setOptions) {
+    try {
+      await chrome.sidePanel.setOptions({
+        path: "sidepanel.html",
+        enabled: true
+      });
+    } catch (error) {
+      console.warn("Continuum side panel init warning:", error);
+    }
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
+      if (message.type === "OFFSCREEN_READY") {
+        await storageSet("local", { continuum_offscreen_ready: true });
+        sendResponse({ ok: true });
+        return;
+      }
+
       switch (message.type) {
-        case "CAPTURE_ACTION": {
-          const result = await handleCapturedAction(sender, message.payload);
-          sendResponse({ ok: true, ...result });
-          return;
-        }
+        case "OPEN_WORKSPACE": {
+          const tab = await getActiveTab();
+          if (!tab || typeof tab.windowId !== "number") {
+            throw new Error("No active Chrome window was found.");
+          }
 
-        case "GET_SESSION_INFO": {
-          const result = await getSessionInfo(message.payload.tabId);
-          sendResponse(result);
-          return;
-        }
+          if (!chrome.sidePanel || !chrome.sidePanel.open) {
+            throw new Error("Side Panel API is not available in this Chrome build.");
+          }
 
-        case "SEARCH_DOCS": {
-          const settings = await getSettings();
-          const url = `${settings.backendBaseUrl}/docs/search?query=${encodeURIComponent(
-            message.payload.query || ""
-          )}`;
-          const result = await fetchJson(url, { method: "GET" });
-          sendResponse(result);
-          return;
-        }
-
-        case "GENERATE_DOCS": {
-          const result = await generateDocsForSession(message.payload.sessionId);
-          sendResponse(result);
-          return;
-        }
-
-        case "GET_LATEST_DOC": {
-          const result = await getLatestDoc(message.payload.sessionId);
-          sendResponse(result);
-          return;
-        }
-
-        case "GET_AUTOMATION_SUGGESTIONS": {
-          const result = await getAutomationSuggestions(message.payload.sessionId);
-          sendResponse(result);
-          return;
-        }
-
-        case "RUN_AUDIT": {
-          const settings = await getSettings();
-          const result = await fetchJson(`${settings.backendBaseUrl}/audit-check`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: message.payload.content,
-              rules: settings.auditRules
-            })
+          await chrome.sidePanel.setOptions({
+            path: "sidepanel.html",
+            enabled: true
           });
-          sendResponse(result);
-          return;
-        }
 
-        case "PING_BACKEND": {
-          const settings = await getSettings();
-          const result = await fetchJson(`${settings.backendBaseUrl}/health`, {
-            method: "GET"
+          await chrome.sidePanel.open({
+            windowId: tab.windowId
           });
-          sendResponse(result);
+
+          sendResponse({ ok: true });
           return;
         }
 
-        case "CAPTURE_SCREENSHOT": {
-          const result = await captureScreenshotForActiveTab();
-          sendResponse(result);
-          return;
-        }
-
-        case "START_MEETING_CAPTURE": {
-          const result = await startMeetingCaptureForActiveTab();
-          sendResponse(result);
-          return;
-        }
-
-        case "STOP_MEETING_CAPTURE": {
-          const result = await stopMeetingCapture();
-          sendResponse(result);
-          return;
-        }
-
-        case "GET_MEETING_STATUS": {
-          const result = await getMeetingStatus();
-          sendResponse(result);
-          return;
-        }
-
-        case "GET_LATEST_MEETING": {
-          const result = await getLatestMeeting(message.payload.sessionId);
-          sendResponse(result);
-          return;
-        }
-
-        case "OFFSCREEN_MEETING_COMPLETE": {
-          await handleOffscreenMeetingComplete(message.payload);
+        case "OPEN_LIBRARY": {
+          await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
           sendResponse({ ok: true });
           return;
         }
@@ -144,14 +71,104 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
+        case "PING_BACKEND": {
+          const s = await getSettings();
+          try {
+            const r = await fetchJson(`${s.backendBaseUrl}/health`, { method: "GET" });
+            sendResponse(r);
+          } catch (error) {
+            sendResponse({
+              ok: false,
+              error: `Could not reach backend at ${s.backendBaseUrl}. Is uvicorn running?`
+            });
+          }
+          return;
+        }
+
+        case "CAPTURE_ACTION": {
+          const r = await handleCapturedAction(sender, message.payload);
+          sendResponse({ ok: true, ...r });
+          return;
+        }
+
+        case "GET_SESSION_INFO": {
+          const r = await getSessionInfo(message.payload.tabId);
+          sendResponse(r);
+          return;
+        }
+
+        case "SET_CAPTURE_INTENT": {
+          await setCaptureIntent(message.payload.sessionId, message.payload.intent);
+          sendResponse({ ok: true });
+          return;
+        }
+
+        case "GET_CAPTURE_INTENT": {
+          const intent = await getCaptureIntent(message.payload.sessionId);
+          sendResponse({ ok: true, intent });
+          return;
+        }
+
+        case "GET_EVIDENCE_SUMMARY": {
+          const s = await getSettings();
+          const summary = await fetchJson(
+            `${s.backendBaseUrl}/sessions/evidence-summary?session_id=${encodeURIComponent(
+              message.payload.sessionId
+            )}`,
+            { method: "GET" }
+          );
+          sendResponse({ ok: true, summary: summary.summary });
+          return;
+        }
+
+        case "CAPTURE_SCREENSHOT": {
+          const r = await captureScreenshotForActiveTab(message.payload);
+          sendResponse(r);
+          return;
+        }
+
+        case "GENERATE_DOCS": {
+          const r = await generateDocsForSession(message.payload.sessionId);
+          sendResponse(r);
+          return;
+        }
+
+        case "GET_LATEST_MEETING": {
+          const r = await getLatestMeeting(message.payload.sessionId);
+          sendResponse(r);
+          return;
+        }
+
+        case "GET_MEETING_STATUS": {
+          const r = await getMeetingStatus();
+          sendResponse(r);
+          return;
+        }
+
+        case "START_MEETING_CAPTURE": {
+          const r = await startMeetingCaptureForActiveTab();
+          sendResponse(r);
+          return;
+        }
+
+        case "STOP_MEETING_CAPTURE": {
+          const r = await stopMeetingCapture();
+          sendResponse(r);
+          return;
+        }
+
+        case "OFFSCREEN_MEETING_COMPLETE": {
+          await handleOffscreenMeetingComplete(message.payload);
+          sendResponse({ ok: true });
+          return;
+        }
+
         default:
           sendResponse({ ok: false, error: "Unknown message type." });
+          return;
       }
-    } catch (error) {
-      sendResponse({
-        ok: false,
-        error: error && error.message ? error.message : String(error)
-      });
+    } catch (e) {
+      sendResponse({ ok: false, error: e?.message ? e.message : String(e) });
     }
   })();
 
@@ -159,69 +176,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleCapturedAction(sender, action) {
-  const senderTab = sender.tab;
-  if (!senderTab || typeof senderTab.id !== "number") {
-    throw new Error("Missing sender tab.");
-  }
+  const tab = sender.tab;
+  if (!tab?.id) throw new Error("Missing sender tab.");
 
-  const tabId = senderTab.id;
-  const page = {
-    url: senderTab.url || "",
-    title: senderTab.title || ""
-  };
+  const tabId = tab.id;
+  const page = { url: tab.url || "", title: tab.title || "" };
 
   const sessionInfo = await getOrCreateSessionForTab(tabId, page.url);
   const sessionId = sessionInfo.sessionId;
 
   const buffers = (await storageGet("local", "continuum_buffers")).continuum_buffers || {};
-  const existingBuffer = buffers[sessionId] || {
-    sessionId,
-    tabId,
-    page,
-    actions: []
-  };
+  const existing = buffers[sessionId] || { sessionId, tabId, page, actions: [] };
 
-  existingBuffer.page = page;
-  existingBuffer.actions.push({
-    ...action,
-    timestamp: action.timestamp || Date.now()
-  });
+  existing.page = page;
+  existing.actions.push({ ...action, timestamp: action.timestamp || Date.now() });
 
-  buffers[sessionId] = existingBuffer;
+  buffers[sessionId] = existing;
   await storageSet("local", { continuum_buffers: buffers });
 
-  let flushed = false;
-  let latestResult = null;
-
-  if (existingBuffer.actions.length >= 5 || action.kind === "submit") {
-    latestResult = await flushSession(sessionId);
-    flushed = Boolean(latestResult);
+  if (existing.actions.length >= 6 || action.kind === "submit") {
+    await flushSession(sessionId);
   }
 
-  return {
-    sessionId,
-    bufferedActionCount: existingBuffer.actions.length,
-    flushed,
-    latestResult
-  };
+  return { sessionId };
 }
 
 async function getSessionInfo(tabId) {
   const mappings =
     (await storageGet("local", "continuum_tab_sessions")).continuum_tab_sessions || {};
   const mapping = mappings[String(tabId)];
-
-  if (!mapping) {
-    return {
-      ok: true,
-      sessionId: null,
-      latestResult: null
-    };
-  }
+  if (!mapping) return { ok: true, sessionId: null, latestResult: null };
 
   const lastResults =
     (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
-
   return {
     ok: true,
     sessionId: mapping.sessionId,
@@ -229,270 +216,194 @@ async function getSessionInfo(tabId) {
   };
 }
 
-async function generateDocsForSession(sessionId) {
-  await flushSession(sessionId);
-
-  const settings = await getSettings();
-  const result = await fetchJson(`${settings.backendBaseUrl}/docs/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_id: sessionId,
-      rules: settings.auditRules
-    })
-  });
-
-  await cacheLatestResult(sessionId, result);
-  return result;
-}
-
-async function getLatestDoc(sessionId) {
-  const settings = await getSettings();
-  const url = `${settings.backendBaseUrl}/docs/latest?session_id=${encodeURIComponent(sessionId)}`;
-  return await fetchJson(url, { method: "GET" });
-}
-
-async function getAutomationSuggestions(sessionId) {
-  await flushSession(sessionId);
-
-  const settings = await getSettings();
-  return await fetchJson(`${settings.backendBaseUrl}/automate-step`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId })
-  });
-}
-
 async function flushSession(sessionId) {
-  const settings = await getSettings();
+  const s = await getSettings();
   const buffers = (await storageGet("local", "continuum_buffers")).continuum_buffers || {};
   const buffer = buffers[sessionId];
 
-  if (!buffer || !Array.isArray(buffer.actions) || buffer.actions.length === 0) {
-    return null;
-  }
+  if (!buffer?.actions?.length) return null;
 
-  const result = await fetchJson(`${settings.backendBaseUrl}/ingest-actions`, {
+  const intent = await getCaptureIntent(sessionId);
+
+  const result = await fetchJson(`${s.backendBaseUrl}/ingest-actions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       session_id: sessionId,
       page: buffer.page,
       actions: buffer.actions,
-      rules: settings.auditRules
+      rules: s.auditRules,
+      intent: intent || null
     })
   });
 
   buffer.actions = [];
   buffers[sessionId] = buffer;
   await storageSet("local", { continuum_buffers: buffers });
-  await cacheLatestResult(sessionId, result);
 
-  return result;
-}
-
-async function cacheLatestResult(sessionId, result) {
   const lastResults =
     (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
   lastResults[sessionId] = result;
   await storageSet("local", { continuum_last_results: lastResults });
+
+  return result;
 }
 
-async function captureScreenshotForActiveTab() {
-  /*
-    WHAT THIS DOES
-    1. Finds the active tab
-    2. Finds that tab's current workflow session
-    3. Captures a PNG screenshot of the visible area
-    4. Sends that screenshot to the backend as evidence
-
-    WHY
-    Users want screenshots embedded as proof/evidence for the documented process.
-  */
-  const settings = await getSettings();
-  const tab = await getActiveTab();
-  if (!tab || typeof tab.id !== "number") {
-    throw new Error("No active tab found.");
+async function generateDocsForSession(sessionId) {
+  const intent = await getCaptureIntent(sessionId);
+  if (!intent?.process_name) {
+    throw new Error("Set intent first in the Side Panel before generating docs.");
   }
 
+  await flushSession(sessionId);
+
+  const s = await getSettings();
+  const result = await fetchJson(`${s.backendBaseUrl}/docs/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent })
+  });
+
+  const lastResults =
+    (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
+  lastResults[sessionId] = result;
+  await storageSet("local", { continuum_last_results: lastResults });
+
+  return result;
+}
+
+async function captureScreenshotForActiveTab(payload) {
+  const s = await getSettings();
+  const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
+
   const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  const sessionId = payload?.sessionId || sessionInfo.sessionId;
+
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
 
-  const result = await fetchJson(`${settings.backendBaseUrl}/sessions/screenshot`, {
+  const result = await fetchJson(`${s.backendBaseUrl}/sessions/screenshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      session_id: sessionInfo.sessionId,
+      session_id: sessionId,
       page_url: tab.url || "",
       page_title: tab.title || "",
-      data_url: dataUrl
+      data_url: dataUrl,
+      caption: payload?.caption || "",
+      recommended: !!payload?.recommended,
+      step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0
     })
   });
 
-  return {
-    ok: true,
-    sessionId: sessionInfo.sessionId,
-    screenshot: result.screenshot
-  };
+  return { ok: true, screenshot: result.screenshot, sessionId };
+}
+
+async function setCaptureIntent(sessionId, intent) {
+  const all = (await storageGet("local", "continuum_intents")).continuum_intents || {};
+  all[sessionId] = intent;
+  await storageSet("local", { continuum_intents: all });
+}
+
+async function getCaptureIntent(sessionId) {
+  const all = (await storageGet("local", "continuum_intents")).continuum_intents || {};
+  return all[sessionId] || null;
+}
+
+async function ensureOffscreenDocument() {
+  const existing = await storageGet("local", "continuum_offscreen_ready");
+  if (existing.continuum_offscreen_ready) return;
+
+  try {
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["USER_MEDIA"],
+      justification: "Record meeting audio from the active tab."
+    });
+  } catch (e) {
+    const msg = e?.message ? e.message : String(e);
+    if (!msg.toLowerCase().includes("exists")) throw e;
+  }
+
+  for (let i = 0; i < 20; i++) {
+    const r = await storageGet("local", "continuum_offscreen_ready");
+    if (r.continuum_offscreen_ready) return;
+    await sleep(100);
+  }
+
+  throw new Error("Offscreen recorder did not become ready. Reload the extension and try again.");
+}
+
+async function sendToOffscreen(type, payload) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ to: "offscreen", type, payload }, (res) => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve(res);
+    });
+  });
 }
 
 async function startMeetingCaptureForActiveTab() {
-  /*
-    WHAT THIS DOES
-    1. Finds the active tab and current session
-    2. Creates an offscreen document if needed
-    3. Gets a tab capture stream ID from the service worker
-    4. Tells the offscreen document to start recording audio from the tab
-    5. Caches meeting state locally
-
-    WHY
-    The service worker cannot use DOM APIs directly, so the actual MediaRecorder
-    work has to happen in the offscreen document.
-  */
-  const currentState =
+  const state =
     (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+  if (state.status === "recording") return { ok: true, ...state };
 
-  if (currentState.status === "recording") {
-    return {
-      ok: true,
-      status: "recording",
-      sessionId: currentState.sessionId,
-      message: "Meeting recording is already running."
-    };
-  }
-
-  const settings = await getSettings();
+  const s = await getSettings();
   const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
 
-  if (!tab || typeof tab.id !== "number") {
-    throw new Error("No active tab found.");
-  }
-
-  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
   await ensureOffscreenDocument();
 
-  const streamId = await chrome.tabCapture.getMediaStreamId({
-    targetTabId: tab.id
+  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+
+  await sendToOffscreen("OFFSCREEN_PING", {});
+  await sendToOffscreen("OFFSCREEN_START_RECORDING", {
+    streamId,
+    sessionId: sessionInfo.sessionId,
+    tabId: tab.id,
+    backendBaseUrl: s.backendBaseUrl,
+    pageUrl: tab.url || "",
+    pageTitle: tab.title || ""
   });
 
-  await chrome.runtime.sendMessage({
-    type: "OFFSCREEN_START_RECORDING",
-    payload: {
-      streamId,
-      sessionId: sessionInfo.sessionId,
-      tabId: tab.id,
-      backendBaseUrl: settings.backendBaseUrl,
-      pageUrl: tab.url || "",
-      pageTitle: tab.title || ""
-    }
-  });
-
-  const nextState = {
+  const next = {
     status: "recording",
     sessionId: sessionInfo.sessionId,
     tabId: tab.id,
     startedAt: Date.now()
   };
-
-  await storageSet("local", { continuum_meeting_state: nextState });
+  await storageSet("local", { continuum_meeting_state: next });
   await chrome.action.setBadgeText({ text: "REC", tabId: tab.id });
 
-  return {
-    ok: true,
-    ...nextState
-  };
+  return { ok: true, ...next };
 }
 
 async function stopMeetingCapture() {
-  /*
-    WHAT THIS DOES
-    1. Tells the offscreen document to stop MediaRecorder
-    2. Updates local state to "saving"
-    3. Waits for offscreen to upload and send completion message
-
-    WHY
-    Stopping the recording is only step one. The upload + transcript + notes
-    run after the recorder finishes.
-  */
-  const currentState =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
-
-  if (currentState.status !== "recording") {
-    return {
-      ok: true,
-      status: "idle",
-      message: "No meeting recording is currently running."
-    };
-  }
-
-  await chrome.runtime.sendMessage({ type: "OFFSCREEN_STOP_RECORDING" });
-
-  const nextState = {
-    ...currentState,
-    status: "saving"
-  };
-
-  await storageSet("local", { continuum_meeting_state: nextState });
-
-  if (typeof currentState.tabId === "number") {
-    await chrome.action.setBadgeText({ text: "...", tabId: currentState.tabId });
-  }
-
-  return {
-    ok: true,
-    ...nextState
-  };
-}
-
-async function getMeetingStatus() {
   const state =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {
-      status: "idle"
-    };
+    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+  if (state.status !== "recording") return { ok: true, status: "idle" };
 
-  return {
-    ok: true,
-    ...state
-  };
-}
+  await sendToOffscreen("OFFSCREEN_STOP_RECORDING", {});
+  const next = { ...state, status: "saving" };
+  await storageSet("local", { continuum_meeting_state: next });
 
-async function getLatestMeeting(sessionId) {
-  const localResults =
-    (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
-
-  if (sessionId && localResults[sessionId]) {
-    return { ok: true, meeting: localResults[sessionId] };
+  if (typeof state.tabId === "number") {
+    await chrome.action.setBadgeText({ text: "...", tabId: state.tabId });
   }
-
-  const settings = await getSettings();
-  const url = `${settings.backendBaseUrl}/meetings/latest?session_id=${encodeURIComponent(
-    sessionId || ""
-  )}`;
-
-  return await fetchJson(url, { method: "GET" });
+  return { ok: true, ...next };
 }
 
 async function handleOffscreenMeetingComplete(payload) {
-  /*
-    WHAT THIS DOES
-    1. Receives the final saved meeting record from offscreen
-    2. Stores it for quick popup access
-    3. Clears the recording badge and resets state
-
-    WHY
-    This gives the popup a fast place to read the newest meeting result.
-  */
   const latest =
     (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
-
-  if (payload && payload.meeting && payload.meeting.session_id) {
+  if (payload?.meeting?.session_id) {
     latest[payload.meeting.session_id] = payload.meeting;
     await storageSet("local", { continuum_latest_meetings: latest });
   }
 
   const state =
     (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
-
   if (typeof state.tabId === "number") {
     await chrome.action.setBadgeText({ text: "", tabId: state.tabId });
   }
@@ -500,89 +411,70 @@ async function handleOffscreenMeetingComplete(payload) {
   await storageSet("local", {
     continuum_meeting_state: {
       status: "idle",
-      sessionId: payload && payload.meeting ? payload.meeting.session_id : null,
+      sessionId: payload?.meeting?.session_id || null,
       lastCompletedAt: Date.now()
     }
   });
 }
 
-async function ensureOffscreenDocument() {
-  /*
-    WHAT THIS DOES
-    Ensures exactly one offscreen document exists before recording begins.
+async function getMeetingStatus() {
+  const state =
+    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {
+      status: "idle"
+    };
+  return { ok: true, ...state };
+}
 
-    WHY
-    The offscreen document is where MediaRecorder / getUserMedia lives.
-  */
-  if (chrome.runtime.getContexts) {
-    const contexts = await chrome.runtime.getContexts({
-      contextTypes: ["OFFSCREEN_DOCUMENT"]
-    });
+async function getLatestMeeting(sessionId) {
+  const local =
+    (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
+  if (sessionId && local[sessionId]) return { ok: true, meeting: local[sessionId] };
 
-    const hasExisting = contexts.some((ctx) => ctx.documentUrl && ctx.documentUrl.includes("offscreen.html"));
-    if (hasExisting) return;
-  }
-
-  try {
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: ["USER_MEDIA"],
-      justification: "Record meeting audio from the active tab for transcripts and notes."
-    });
-  } catch (error) {
-    const message = error && error.message ? error.message : String(error);
-    if (!message.toLowerCase().includes("exists")) {
-      throw error;
-    }
-  }
+  const s = await getSettings();
+  return await fetchJson(
+    `${s.backendBaseUrl}/meetings/latest?session_id=${encodeURIComponent(sessionId || "")}`,
+    { method: "GET" }
+  );
 }
 
 async function getOrCreateSessionForTab(tabId, currentUrl) {
   const key = String(tabId);
   const mappings =
     (await storageGet("local", "continuum_tab_sessions")).continuum_tab_sessions || {};
-
   const existing = mappings[key];
-  if (existing && existing.url === currentUrl) {
-    return existing;
-  }
+  if (existing && existing.url === currentUrl) return existing;
 
-  const sessionId = createSessionId();
-  const newMapping = { sessionId, url: currentUrl };
-  mappings[key] = newMapping;
+  const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const next = { sessionId, url: currentUrl };
+  mappings[key] = next;
   await storageSet("local", { continuum_tab_sessions: mappings });
-  return newMapping;
-}
-
-function createSessionId() {
-  return `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return next;
 }
 
 async function getSettings() {
-  const result = await storageGet("sync", "continuum_settings");
+  const r = await storageGet("sync", "continuum_settings");
   return {
     ...DEFAULT_SETTINGS,
-    ...(result.continuum_settings || {}),
+    ...(r.continuum_settings || {}),
     auditRules: {
       ...DEFAULT_SETTINGS.auditRules,
-      ...((result.continuum_settings || {}).auditRules || {})
+      ...((r.continuum_settings || {}).auditRules || {})
     }
   };
 }
 
 function fetchJson(url, options) {
-  return fetch(url, options).then(async (response) => {
-    const text = await response.text();
+  return fetch(url, options).then(async (resp) => {
+    const text = await resp.text();
     let data = {};
-
     try {
       data = text ? JSON.parse(text) : {};
-    } catch (error) {
+    } catch {
       data = { raw: text };
     }
 
-    if (!response.ok) {
-      throw new Error(data.detail || data.error || `Request failed: ${response.status}`);
+    if (!resp.ok) {
+      throw new Error(data.detail || data.error || `Request failed: ${resp.status}`);
     }
 
     return data;
@@ -590,21 +482,21 @@ function fetchJson(url, options) {
 }
 
 function storageGet(area, key) {
-  return new Promise((resolve) => {
-    chrome.storage[area].get(key, resolve);
-  });
+  return new Promise((resolve) => chrome.storage[area].get(key, resolve));
 }
 
 function storageSet(area, value) {
-  return new Promise((resolve) => {
-    chrome.storage[area].set(value, resolve);
-  });
+  return new Promise((resolve) => chrome.storage[area].set(value, resolve));
 }
 
 function getActiveTab() {
-  return new Promise((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      resolve(tabs && tabs.length ? tabs[0] : null);
-    });
-  });
+  return new Promise((resolve) =>
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) =>
+      resolve(tabs?.[0] || null)
+    )
+  );
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }

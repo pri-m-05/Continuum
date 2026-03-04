@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum Workspace</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="header">
+        <div>
+          <h1>Continuum</h1>
+          <div id="backendStatus" class="subtle">Backend: checking...</div>
+        </div>
+        <div class="headerBtns">
+          <button id="libraryBtn" class="ghost">Library</button>
+          <button id="settingsBtn" class="ghost">Settings</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>Session</h2>
+        <div id="sessionInfo">Loading...</div>
+      </section>
+
+      <section class="card">
+        <h2>What do you want to document?</h2>
+        <div class="grid">
+          <label>
+            Process name
+            <input id="processName" placeholder="e.g., Create a vendor in SAP" />
+          </label>
+
+          <label>
+            Doc type
+            <select id="docType">
+              <option value="sop">SOP</option>
+              <option value="walkthrough">Walkthrough</option>
+              <option value="training">Training guide</option>
+              <option value="audit">Audit evidence pack</option>
+              <option value="meeting">Meeting notes</option>
+            </select>
+          </label>
+
+          <label>
+            Audience
+            <select id="audience">
+              <option value="self">Just me</option>
+              <option value="team">My team</option>
+              <option value="new_hires">New hires</option>
+              <option value="auditors">Auditors</option>
+            </select>
+          </label>
+
+          <label>
+            Notes (optional)
+            <input id="intentNotes" placeholder="Anything special to include?" />
+          </label>
+        </div>
+
+        <div class="checks">
+          <label><input type="checkbox" id="needScreenshots" checked /> Include screenshots</label>
+          <label><input type="checkbox" id="needMeeting" /> Include meeting transcript + notes</label>
+        </div>
+
+        <div class="row">
+          <button id="saveIntentBtn">Save Intent</button>
+          <button id="generateBtn" class="primary">Generate Docs</button>
+        </div>
+
+        <div id="intentStatus" class="subtle"></div>
+      </section>
+
+      <section class="card">
+        <h2>Guided Evidence</h2>
+        <div id="guidanceList" class="list"></div>
+        <div class="row">
+          <button id="captureRecommendedBtn">Capture Recommended Screenshot</button>
+          <button id="captureAnyBtn" class="ghost">Capture Screenshot (manual)</button>
+        </div>
+        <div id="screenshotStatus" class="subtle"></div>
+        <div id="latestScreenshot" class="thumbWrap"></div>
+      </section>
+
+      <section class="card">
+        <h2>Meeting</h2>
+        <div id="meetingStatus" class="subtle">Status: unknown</div>
+        <div class="row">
+          <button id="startMeetingBtn">Start</button>
+          <button id="stopMeetingBtn">Stop</button>
+          <button id="refreshMeetingBtn" class="ghost">Refresh</button>
+        </div>
+        <div id="latestMeeting" class="list"></div>
+      </section>
+
+      <section class="card">
+        <h2>Draft Preview</h2>
+        <div id="latestDraft" class="list">No draft yet.</div>
+      </section>
+    </div>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

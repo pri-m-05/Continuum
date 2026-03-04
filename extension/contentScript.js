@@ -1,19 +1,22 @@
 /*
   CONTENT SCRIPT
 
-  WHAT THIS FILE DOES:
+  WHAT THIS FILE DOES
   1. Runs inside webpages
   2. Watches user interactions
   3. Sends normalized actions to the background script
+  4. Safely ignores expected runtime errors after extension reloads
 
 */
 
+let continuumExtensionAlive = true;
+
 (function initContinuumContentScript() {
-  /*
-    Send one page_view event when the script starts.
-    WHY:
-    This gives the backend context about which page the workflow started on.
-  */
+  if (!canUseExtensionRuntime()) {
+    continuumExtensionAlive = false;
+    return;
+  }
+
   sendAction({
     kind: "page_view",
     targetLabel: document.title || "Untitled Page",
@@ -22,17 +25,17 @@
     pageTitle: document.title || ""
   });
 
-  /*
-    Capture clicks.
-    WHY:
-    Clicks are the clearest signal for procedural user behavior.
-  */
   document.addEventListener(
     "click",
     (event) => {
-      const element = event.target && event.target.closest
-        ? event.target.closest("button, a, input, select, textarea, [role='button'], label, div, span")
-        : null;
+      if (!continuumExtensionAlive) return;
+
+      const element =
+        event.target && event.target.closest
+          ? event.target.closest(
+              "button, a, input, select, textarea, [role='button'], label, div, span"
+            )
+          : null;
 
       if (!element) return;
 
@@ -47,15 +50,11 @@
     true
   );
 
-  /*
-    Capture change events on inputs.
-    WHY:
-    Documentation often needs to mention what fields were edited,
-    but we avoid capturing sensitive values by default.
-  */
   document.addEventListener(
     "change",
     (event) => {
+      if (!continuumExtensionAlive) return;
+
       const element = event.target;
       if (!element || !matchesFormField(element)) return;
 
@@ -73,14 +72,11 @@
     true
   );
 
-  /*
-    Capture form submit events.
-    WHY:
-    Submit is usually the strongest signal that a workflow step is complete.
-  */
   document.addEventListener(
     "submit",
     (event) => {
+      if (!continuumExtensionAlive) return;
+
       const form = event.target;
       if (!form) return;
 
@@ -98,17 +94,58 @@
 
 function sendAction(action) {
   /*
-    Normalize timestamp before sending.
-    WHY:
-    The backend needs timing to reduce duplicates and group nearby actions.
+    WHY THIS IS WRAPPED
+    After an unpacked extension reload, older content scripts can still be present
+    in existing tabs for a moment. We do not want noisy runtime errors every time
+    they try to send a message.
   */
-  chrome.runtime.sendMessage({
-    type: "CAPTURE_ACTION",
-    payload: {
-      ...action,
-      timestamp: Date.now()
+  if (!canUseExtensionRuntime()) {
+    continuumExtensionAlive = false;
+    return;
+  }
+
+  try {
+    chrome.runtime.sendMessage(
+      {
+        type: "CAPTURE_ACTION",
+        payload: {
+          ...action,
+          timestamp: Date.now()
+        }
+      },
+      () => {
+        const err = chrome.runtime.lastError;
+        if (!err) return;
+
+        const msg = String(err.message || "");
+        if (
+          msg.includes("Extension context invalidated") ||
+          msg.includes("Receiving end does not exist") ||
+          msg.includes("The message port closed before a response was received")
+        ) {
+          continuumExtensionAlive = false;
+          return;
+        }
+
+        console.warn("Continuum contentScript sendMessage error:", msg);
+      }
+    );
+  } catch (error) {
+    const msg = String(error && error.message ? error.message : error);
+    if (msg.includes("Extension context invalidated")) {
+      continuumExtensionAlive = false;
+      return;
     }
-  });
+    console.warn("Continuum contentScript unexpected error:", msg);
+  }
+}
+
+function canUseExtensionRuntime() {
+  try {
+    return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+  } catch (error) {
+    return false;
+  }
 }
 
 function matchesFormField(element) {
@@ -117,11 +154,6 @@ function matchesFormField(element) {
 }
 
 function getSafeValuePreview(element) {
-  /*
-    Avoid leaking sensitive values.
-    WHY:
-    This extension should help document processes, not collect secrets.
-  */
   const type = (element.type || "").toLowerCase();
   const forbiddenTypes = ["password", "email", "hidden", "tel", "number"];
 
@@ -141,11 +173,6 @@ function getSafeValuePreview(element) {
 }
 
 function getElementLabel(element) {
-  /*
-    Build a human-readable label.
-    WHY:
-    The generated documentation should describe user actions in plain language.
-  */
   const aria = element.getAttribute && element.getAttribute("aria-label");
   if (aria) return aria.trim();
 
@@ -158,19 +185,15 @@ function getElementLabel(element) {
   const id = element.getAttribute && element.getAttribute("id");
   if (id) return id.trim();
 
-  const text = (element.innerText || element.textContent || "").trim().replace(/\s+/g, " ");
+  const text = (element.innerText || element.textContent || "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (text) return text.slice(0, 80);
 
   return (element.tagName || "element").toLowerCase();
 }
 
 function getSimpleSelector(element) {
-  /*
-    Create a small selector-like hint.
-    WHY:
-    This helps distinguish actions on similar elements without building
-    a fragile full DOM path.
-  */
   const tag = (element.tagName || "").toLowerCase();
   const id = element.id ? `#${element.id}` : "";
   const classNames =

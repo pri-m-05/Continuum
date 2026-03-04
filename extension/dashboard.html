@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum Library</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="header">
+        <h1>Continuum Library</h1>
+        <div class="subtle" id="backendInfo">Loading settings...</div>
+      </header>
+
+      <section class="card">
+        <input id="q" placeholder="Search docs..." />
+        <button id="searchBtn">Search</button>
+        <button id="refreshBtn" class="ghost">Recent</button>
+      </section>
+
+      <section class="card">
+        <h2>Documents</h2>
+        <div id="list" class="list">Loading...</div>
+      </section>
+
+      <section class="card">
+        <h2>Preview</h2>
+        <div id="preview" class="list subtle">Select a document.</div>
+      </section>
+    </div>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>

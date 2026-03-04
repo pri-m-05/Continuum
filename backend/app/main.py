@@ -1,17 +1,5 @@
 """
 FASTAPI ENTRYPOINT
-
-WHAT THIS FILE DOES
-1. Starts the API
-2. Enables CORS for the extension
-3. Accepts browser action batches
-4. Generates document options
-5. Audits docs
-6. Searches docs
-7. Saves screenshots
-8. Accepts meeting audio uploads
-9. Generates meeting transcripts + follow-up notes
-
 """
 
 from __future__ import annotations
@@ -44,7 +32,7 @@ from app.services.store import (
     upsert_session,
 )
 
-app = FastAPI(title="Continuum API", version="1.1.0")
+app = FastAPI(title="Continuum API", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,11 +50,10 @@ def startup_event():
 
 @app.get("/")
 def root():
-    
     return {
         "ok": True,
         "service": "continuum-api",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "routes": [
             "/health",
             "/ingest-actions",
@@ -76,6 +63,8 @@ def root():
             "/audit-check",
             "/automate-step",
             "/sessions/screenshot",
+            "/sessions/evidence-summary",
+            "/sessions/latest-screenshot",
             "/meetings/upload",
             "/meetings/latest",
         ],
@@ -91,6 +80,7 @@ def health():
 def ingest_actions(payload: IngestRequest):
     actions = [action.model_dump() for action in payload.actions]
     page = payload.page.model_dump()
+    intent = payload.intent.model_dump() if payload.intent else None
 
     cleaned_actions = dedupe_actions(actions)
     steps = actions_to_steps(cleaned_actions, page)
@@ -109,6 +99,7 @@ def ingest_actions(payload: IngestRequest):
         page=page,
         steps=steps,
         evidence=evidence,
+        intent=intent,
     )
 
     rules = payload.rules.model_dump() if payload.rules else None
@@ -134,12 +125,14 @@ def generate_docs(payload: GenerateRequest):
     page = session.get("page", {})
     steps = session.get("steps", [])
     evidence = get_session_evidence_summary(payload.session_id)
+    intent = payload.intent.model_dump() if payload.intent else None
 
     documents = generate_document_options(
         payload.session_id,
         page,
         steps,
         evidence=evidence,
+        intent=intent,
     )
 
     rules = payload.rules.model_dump() if payload.rules else None
@@ -199,13 +192,21 @@ def automate_step(payload: AutomationRequest):
     }
 
 
+@app.get("/sessions/evidence-summary")
+def evidence_summary(session_id: str):
+    summary = get_session_evidence_summary(session_id)
+    return {"ok": True, "summary": summary}
+
+
 @app.post("/sessions/screenshot")
 def sessions_screenshot(payload: dict):
-    
     session_id = str(payload.get("session_id", "")).strip()
     page_url = str(payload.get("page_url", "")).strip()
     page_title = str(payload.get("page_title", "")).strip()
     data_url = str(payload.get("data_url", "")).strip()
+    caption = str(payload.get("caption", "")).strip()
+    recommended = bool(payload.get("recommended", False))
+    step_index = int(payload.get("step_index", 0) or 0)
 
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
@@ -217,6 +218,9 @@ def sessions_screenshot(payload: dict):
         page_url=page_url,
         page_title=page_title,
         data_url=data_url,
+        caption=caption,
+        recommended=recommended,
+        step_index=step_index,
     )
 
     return {
@@ -242,7 +246,6 @@ async def meetings_upload(
     page_title: str = Form(default=""),
     file: UploadFile = File(...),
 ):
-    
     content = await file.read()
 
     if not content:

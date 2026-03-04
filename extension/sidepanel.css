@@ -1,0 +1,104 @@
+body {
+  margin: 0;
+  background: #f7f7f8;
+  color: #111;
+  font-family: Arial, sans-serif;
+}
+
+.wrap { padding: 12px; }
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+h1 { margin: 0; font-size: 18px; }
+h2 { margin: 0 0 8px; font-size: 14px; }
+
+.card {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.subtle { color: #555; font-size: 12px; margin-top: 4px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+label { font-size: 12px; color: #333; display: grid; gap: 6px; }
+
+input, select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  background: white;
+}
+
+.checks { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; }
+.row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+button {
+  border: none;
+  padding: 9px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  background: #111;
+  color: white;
+  flex: 1;
+  min-width: 110px;
+}
+
+button:hover { opacity: 0.92; }
+
+button.ghost {
+  background: white;
+  border: 1px solid #ccc;
+  color: #111;
+}
+
+button.primary { background: #111; }
+
+.headerBtns { display: flex; gap: 8px; }
+
+.list { font-size: 12px; color: #111; }
+.list pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f3f3f3;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.item {
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  color: #444;
+}
+
+.thumbWrap img {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  margin-top: 8px;
+}

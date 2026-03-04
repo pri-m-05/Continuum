@@ -120,6 +120,31 @@
       ],
       "created_at": "2026-03-03T20:41:29.544173+00:00",
       "updated_at": "2026-03-03T20:41:29.544643+00:00"
+    },
+    "session_1772634901554_5pdajqh8": {
+      "session_id": "session_1772634901554_5pdajqh8",
+      "page": {
+        "url": "https://github.com/pri-m-05/Continuum/tree/main",
+        "title": "pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency."
+      },
+      "actions": [
+        {
+          "kind": "page_view",
+          "targetLabel": "pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.",
+          "targetSelector": "document",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/pri-m-05/Continuum/tree/main",
+          "pageTitle": "pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.",
+          "timestamp": 1772634901553
+        }
+      ],
+      "steps": [
+        "Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main)."
+      ],
+      "created_at": "2026-03-04T20:12:47.276508+00:00",
+      "updated_at": "2026-03-04T20:12:47.276711+00:00"
     }
   },
   "documents": [
@@ -467,6 +492,144 @@
         }
       },
       "created_at": "2026-03-03T20:41:29.777066+00:00"
+    },
+    {
+      "id": "doc_b90c86b139644afaa982efb07adbd5a9",
+      "title": "test1 - SOP Draft",
+      "summary": "Formal standard operating procedure draft generated from captured browser actions.",
+      "content": "# Purpose\n        Document the 'test1' process. Audience: self.\nDocument the procedure used on pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency..\n\n# Preconditions\n- User has access to the target application.\n- User is on the correct page before starting.\n- Required source information is available.\n\n# Procedure\n1. Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main).\n\n# Controls\n- Confirm the correct page is open before editing data.\n- Review field changes before submission.\n- Validate the final submission step.\n- Capture screenshots when evidence is required.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05/Continuum/tree/main\n- Session ID: session_1772634901554_5pdajqh8\n- Captured steps: 1\n",
+      "session_id": "session_1772634901554_5pdajqh8",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-04T20:12:47.293075+00:00"
+    },
+    {
+      "id": "doc_e9fb390832d84166b68bfde68e3c28c4",
+      "title": "test1 - Quick Reference",
+      "summary": "Shorter checklist-style process reference.",
+      "content": "# Purpose\n        Document the 'test1' process. Audience: self.\nProvide a quick reference for the test1 process.\n\n# Preconditions\n- Required access is active.\n- The correct record or page has been opened.\n\n# Procedure\n1. Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main).\n\n# Controls\n- Verify key fields before submit.\n- Confirm the expected result appears after completion.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05/Continuum/tree/main\n- Session ID: session_1772634901554_5pdajqh8\n- Captured steps: 1\n",
+      "session_id": "session_1772634901554_5pdajqh8",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-04T20:12:47.293113+00:00"
+    },
+    {
+      "id": "doc_861eb6d9d1d8417d8a93b6241a1c55cc",
+      "title": "test1 - Control Narrative",
+      "summary": "Audit-oriented narrative emphasizing control points and evidence.",
+      "content": "# Purpose\n        Document the 'test1' process. Audience: self.\nDescribe the control flow and documentation expectations for test1.\n\n# Preconditions\n- User identity and access have been validated.\n- Input source data has been reviewed.\n\n# Procedure\n1. Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main).\n\n# Controls\n- Control 1: Ensure the intended record or workflow page is selected.\n- Control 2: Review updated fields before submitting.\n- Control 3: Confirm the completion state or confirmation message.\n- Control 4: Preserve evidence for audit review.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05/Continuum/tree/main\n- Session ID: session_1772634901554_5pdajqh8\n- Captured steps: 1\n",
+      "session_id": "session_1772634901554_5pdajqh8",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-04T20:12:47.293148+00:00"
+    },
+    {
+      "id": "doc_2f2b49091b874a1796cb1b892de8075e",
+      "title": "test1 - SOP Draft",
+      "summary": "Formal standard operating procedure draft generated from captured browser actions.",
+      "content": "# Purpose\n        Document the 'test1' process. Audience: self.\nDocument the procedure used on pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency..\n\n# Preconditions\n- User has access to the target application.\n- User is on the correct page before starting.\n- Required source information is available.\n\n# Procedure\n1. Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main).\n\n# Controls\n- Confirm the correct page is open before editing data.\n- Review field changes before submission.\n- Validate the final submission step.\n- Capture screenshots when evidence is required.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05/Continuum/tree/main\n- Session ID: session_1772634901554_5pdajqh8\n- Captured steps: 1\n",
+      "session_id": "session_1772634901554_5pdajqh8",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-04T20:12:47.333400+00:00"
+    },
+    {
+      "id": "doc_ea321cf913a3474ea6a6eb63cfd14b69",
+      "title": "test1 - Quick Reference",
+      "summary": "Shorter checklist-style process reference.",
+      "content": "# Purpose\n        Document the 'test1' process. Audience: self.\nProvide a quick reference for the test1 process.\n\n# Preconditions\n- Required access is active.\n- The correct record or page has been opened.\n\n# Procedure\n1. Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main).\n\n# Controls\n- Verify key fields before submit.\n- Confirm the expected result appears after completion.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05/Continuum/tree/main\n- Session ID: session_1772634901554_5pdajqh8\n- Captured steps: 1\n",
+      "session_id": "session_1772634901554_5pdajqh8",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-04T20:12:47.333437+00:00"
+    },
+    {
+      "id": "doc_a8ba4d9187d945219a860662dab31d70",
+      "title": "test1 - Control Narrative",
+      "summary": "Audit-oriented narrative emphasizing control points and evidence.",
+      "content": "# Purpose\n        Document the 'test1' process. Audience: self.\nDescribe the control flow and documentation expectations for test1.\n\n# Preconditions\n- User identity and access have been validated.\n- Input source data has been reviewed.\n\n# Procedure\n1. Open page 'pri-m-05/Continuum: Continuum captures and documents processes, compares them to audit policies, and predicts organizational decisions to improve compliance and efficiency.' (https://github.com/pri-m-05/Continuum/tree/main).\n\n# Controls\n- Control 1: Ensure the intended record or workflow page is selected.\n- Control 2: Review updated fields before submitting.\n- Control 3: Confirm the completion state or confirmation message.\n- Control 4: Preserve evidence for audit review.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05/Continuum/tree/main\n- Session ID: session_1772634901554_5pdajqh8\n- Captured steps: 1\n",
+      "session_id": "session_1772634901554_5pdajqh8",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-04T20:12:47.333455+00:00"
     }
   ],
   "workflows": [],

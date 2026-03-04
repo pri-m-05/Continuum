@@ -185,8 +185,10 @@ def save_screenshot(
     page_url: str,
     page_title: str,
     data_url: str,
+    caption: str = "",
+    recommended: bool = False,
+    step_index: int = 0,
 ) -> Dict[str, Any]:
-    
     ensure_store_exists()
 
     if "," not in data_url:
@@ -204,6 +206,9 @@ def save_screenshot(
         "session_id": session_id,
         "page_url": page_url,
         "page_title": page_title,
+        "caption": caption,
+        "recommended": bool(recommended),
+        "step_index": int(step_index),
         "data_url": data_url,
         "relative_path": f"data/screenshots/{file_path.name}",
         "created_at": _now_iso(),
@@ -214,7 +219,6 @@ def save_screenshot(
     screenshots.append(record)
     data["screenshots"] = screenshots
     write_store(data)
-
     return record
 
 

@@ -78,10 +78,25 @@ def generate_document_options(
     page: Dict[str, Any],
     steps: List[str],
     evidence: Dict[str, Any] | None = None,
+    intent: Dict[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
     evidence = evidence or {}
-    title_base = build_title(page)
-    joined_steps = "\n".join([f"{index + 1}. {step}" for index, step in enumerate(steps)])
+    intent = intent or {}
+
+    process_name = intent.get("process_name") or build_title(page)
+    doc_type = intent.get("doc_type", "sop")
+    audience = intent.get("audience", "team")
+    notes = intent.get("notes", "")
+
+    title_base = process_name
+    joined_steps = "\n".join([f"{i+1}. {s}" for i, s in enumerate(steps)])
+
+    intro_line = f"Document the '{process_name}' process."
+    if audience:
+        intro_line += f" Audience: {audience}."
+    if notes:
+        intro_line += f" Notes: {notes}"
+
 
     evidence_lines = [
         f"- Page URL: {page.get('url', '')}",
@@ -109,6 +124,7 @@ def generate_document_options(
         "title": f"{title_base} - SOP Draft",
         "summary": "Formal standard operating procedure draft generated from captured browser actions.",
         "content": f"""# Purpose
+        {intro_line}
 Document the procedure used on {page.get("title", "the target page")}.
 
 # Preconditions
@@ -135,6 +151,7 @@ Document the procedure used on {page.get("title", "the target page")}.
         "title": f"{title_base} - Quick Reference",
         "summary": "Shorter checklist-style process reference.",
         "content": f"""# Purpose
+        {intro_line}
 Provide a quick reference for the {title_base} process.
 
 # Preconditions
@@ -158,6 +175,7 @@ Provide a quick reference for the {title_base} process.
         "title": f"{title_base} - Control Narrative",
         "summary": "Audit-oriented narrative emphasizing control points and evidence.",
         "content": f"""# Purpose
+        {intro_line}
 Describe the control flow and documentation expectations for {title_base}.
 
 # Preconditions

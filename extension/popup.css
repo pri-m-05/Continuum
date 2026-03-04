@@ -2,24 +2,14 @@ body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
-  width: 460px;
+  width: 340px;
   background: #f7f7f8;
   color: #111;
 }
 
-.wrap {
-  padding: 12px;
-}
-
-h1 {
-  margin: 0 0 8px;
-  font-size: 22px;
-}
-
-h2 {
-  margin: 0 0 8px;
-  font-size: 15px;
-}
+.wrap { padding: 12px; }
+h1 { margin: 0 0 8px; font-size: 20px; }
+h2 { margin: 0 0 8px; font-size: 14px; }
 
 .card {
   background: white;
@@ -29,76 +19,16 @@ h2 {
   margin-bottom: 12px;
 }
 
-.wrapButtons {
-  flex-wrap: wrap;
-}
-
-.buttonRow {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 button {
+  width: 100%;
+  margin-top: 6px;
   border: none;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border-radius: 8px;
   cursor: pointer;
   background: #111;
   color: white;
 }
 
-button:hover {
-  opacity: 0.92;
-}
-
-input {
-  width: 100%;
-  box-sizing: border-box;
-  margin-bottom: 8px;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-}
-
-pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: #f3f3f3;
-  padding: 8px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-
-.resultItem {
-  border-top: 1px solid #eee;
-  padding-top: 8px;
-  margin-top: 8px;
-}
-
-.optionBlock {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed #ccc;
-}
-
-.subtle {
-  margin-top: 8px;
-  color: #555;
-  font-size: 12px;
-}
-
-.thumb {
-  width: 100%;
-  margin-top: 8px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-}
-
-.warningBox {
-  background: #fff7e6;
-  border: 1px solid #f0c36d;
-  border-radius: 8px;
-  padding: 8px;
-  margin-top: 8px;
-}
+button:hover { opacity: 0.92; }
+.subtle { margin-top: 8px; color: #555; font-size: 12px; }

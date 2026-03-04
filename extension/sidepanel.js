@@ -1,36 +1,28 @@
 let activeSessionId = null;
-let settingsCache = null;
+let meetingPollHandle = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("libraryBtn").addEventListener("click", () => sendMessage({ type: "OPEN_LIBRARY" }));
   document.getElementById("settingsBtn").addEventListener("click", () => sendMessage({ type: "OPEN_OPTIONS_PAGE" }));
-
   document.getElementById("saveIntentBtn").addEventListener("click", saveIntent);
   document.getElementById("generateBtn").addEventListener("click", generateDocs);
-
   document.getElementById("captureRecommendedBtn").addEventListener("click", () => captureScreenshot({ recommended: true }));
   document.getElementById("captureAnyBtn").addEventListener("click", () => captureScreenshot({ recommended: false }));
-
-  document.getElementById("startMeetingBtn").addEventListener("click", () => sendMessage({ type: "START_MEETING_CAPTURE" }).then(refreshMeetingStatus));
-  document.getElementById("stopMeetingBtn").addEventListener("click", () => sendMessage({ type: "STOP_MEETING_CAPTURE" }).then(refreshMeetingStatus));
+  document.getElementById("startMeetingBtn").addEventListener("click", startMeetingCapture);
+  document.getElementById("stopMeetingBtn").addEventListener("click", stopMeetingCapture);
   document.getElementById("refreshMeetingBtn").addEventListener("click", async () => {
     await refreshMeetingStatus();
     await loadLatestMeeting();
   });
 
-  await loadSettings();
   await pingBackend();
   await loadCurrentSession();
   await loadIntent();
   await refreshGuidance();
   await refreshMeetingStatus();
   await loadLatestMeeting();
+  startMeetingPolling();
 });
-
-async function loadSettings() {
-  const res = await new Promise((resolve) => chrome.storage.sync.get("continuum_settings", resolve));
-  settingsCache = res.continuum_settings || null;
-}
 
 async function pingBackend() {
   const el = document.getElementById("backendStatus");
@@ -53,13 +45,11 @@ async function loadCurrentSession() {
   activeSessionId = info.sessionId || null;
 
   if (!activeSessionId) {
-    document.getElementById("sessionInfo").innerHTML =
-      `No session yet. Click around on the page to start one.`;
+    document.getElementById("sessionInfo").innerHTML = `No session yet. Click around on the page to start one.`;
     return;
   }
 
-  document.getElementById("sessionInfo").innerHTML =
-    `<div><strong>Session:</strong> ${escapeHtml(activeSessionId)}</div>`;
+  document.getElementById("sessionInfo").innerHTML = `<div><strong>Session:</strong> ${escapeHtml(activeSessionId)}</div>`;
 
   if (info.latestResult && info.latestResult.primary_document) {
     renderDraft(info.latestResult);
@@ -68,29 +58,23 @@ async function loadCurrentSession() {
 
 async function loadIntent() {
   if (!activeSessionId) return;
-
   const res = await sendMessage({ type: "GET_CAPTURE_INTENT", payload: { sessionId: activeSessionId } });
   const intent = res.intent || null;
-
   if (!intent) {
     document.getElementById("intentStatus").textContent = "Intent not set yet. Fill the form and click Save Intent.";
     return;
   }
-
-  // Hydrate UI
   document.getElementById("processName").value = intent.process_name || "";
   document.getElementById("docType").value = intent.doc_type || "sop";
   document.getElementById("audience").value = intent.audience || "team";
   document.getElementById("intentNotes").value = intent.notes || "";
   document.getElementById("needScreenshots").checked = !!intent.evidence?.screenshots;
   document.getElementById("needMeeting").checked = !!intent.evidence?.meeting;
-
-  document.getElementById("intentStatus").textContent = "Intent loaded.";
+  document.getElementById("intentStatus").textContent = `Intent loaded (${intent.doc_type || "sop"}).`;
 }
 
 async function saveIntent() {
   const status = document.getElementById("intentStatus");
-
   if (!activeSessionId) {
     status.textContent = "No active session yet. Interact with the page first.";
     return;
@@ -113,7 +97,7 @@ async function saveIntent() {
   }
 
   await sendMessage({ type: "SET_CAPTURE_INTENT", payload: { sessionId: activeSessionId, intent } });
-  status.textContent = "Intent saved. You can now generate docs.";
+  status.textContent = `Intent saved. Primary output will use doc type: ${intent.doc_type}.`;
   await refreshGuidance();
 }
 
@@ -139,27 +123,23 @@ async function refreshGuidance() {
 
   const res = await sendMessage({ type: "GET_CAPTURE_INTENT", payload: { sessionId: activeSessionId } });
   const intent = res.intent || null;
-
   const list = document.getElementById("guidanceList");
+
   if (!intent) {
     list.innerHTML = `<div class="subtle">Set intent to get guided screenshots.</div>`;
     return;
   }
 
-  // Ask backend for evidence counts (so guidance can advance)
   const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId: activeSessionId } });
   const screenshotCount = evidence.summary?.screenshot_count || 0;
-
   const plan = buildScreenshotPlan(intent.doc_type);
   const nextIndex = Math.min(screenshotCount, plan.length - 1);
 
-  list.innerHTML = plan
-    .map((item, idx) => {
-      const marker = idx === nextIndex ? `<span class="badge">next</span>` : "";
-      const done = idx < screenshotCount ? `<span class="badge">done</span>` : "";
-      return `<div class="item"><strong>${escapeHtml(item.title)}</strong> ${marker} ${done}<div class="subtle">${escapeHtml(item.why)}</div></div>`;
-    })
-    .join("");
+  list.innerHTML = plan.map((item, idx) => {
+    const marker = idx === nextIndex ? `<span class="badge">next</span>` : "";
+    const done = idx < screenshotCount ? `<span class="badge">done</span>` : "";
+    return `<div class="item"><strong>${escapeHtml(item.title)}</strong> ${marker} ${done}<div class="subtle">${escapeHtml(item.why)}</div></div>`;
+  }).join("");
 }
 
 function buildScreenshotPlan(docType) {
@@ -175,6 +155,13 @@ function buildScreenshotPlan(docType) {
     return [
       { title: "Meeting context screen", why: "Shows meeting title/date/context." },
       { title: "Key decision slide/page", why: "Supports decisions and action items." }
+    ];
+  }
+  if (docType === "training") {
+    return [
+      { title: "Starting point", why: "Orient the learner to where they begin." },
+      { title: "Important fields", why: "Show what new users are expected to enter." },
+      { title: "Expected result", why: "Demonstrate what success looks like." }
     ];
   }
   return [
@@ -194,10 +181,8 @@ async function captureScreenshot({ recommended }) {
     return;
   }
 
-  // Determine caption
   const intentRes = await sendMessage({ type: "GET_CAPTURE_INTENT", payload: { sessionId: activeSessionId } });
   const intent = intentRes.intent;
-
   if (!intent) {
     status.textContent = "Set intent first so screenshots are labeled correctly.";
     return;
@@ -215,15 +200,9 @@ async function captureScreenshot({ recommended }) {
   try {
     const res = await sendMessage({
       type: "CAPTURE_SCREENSHOT",
-      payload: {
-        sessionId: activeSessionId,
-        caption,
-        recommended: !!recommended,
-        step_index: screenshotCount
-      }
+      payload: { sessionId: activeSessionId, caption, recommended: !!recommended, step_index: screenshotCount }
     });
-
-    status.textContent = "Saved.";
+    status.textContent = `Saved: ${caption}`;
     if (res.screenshot?.data_url) {
       imgBox.innerHTML = `<img src="${res.screenshot.data_url}" alt="Screenshot" />`;
     }
@@ -233,12 +212,61 @@ async function captureScreenshot({ recommended }) {
   }
 }
 
+async function startMeetingCapture() {
+  const box = document.getElementById("latestMeeting");
+  box.innerHTML = `<div class="subtle">Starting meeting capture...</div>`;
+
+  try {
+    const res = await sendMessage({ type: "START_MEETING_CAPTURE" });
+
+    if (res.sessionId) {
+      activeSessionId = res.sessionId;
+      document.getElementById("sessionInfo").innerHTML =
+        `<div><strong>Session:</strong> ${escapeHtml(activeSessionId)}</div>`;
+    }
+
+    await refreshMeetingStatus();
+    box.innerHTML =
+      `<div class="item"><strong>Recording started.</strong><div class="subtle">Keep the meeting tab active and click Stop when finished.</div></div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
+    await refreshMeetingStatus();
+  }
+}
+
+async function stopMeetingCapture() {
+  const box = document.getElementById("latestMeeting");
+  box.innerHTML =
+    `<div class="subtle">Stopping meeting capture and waiting for upload/transcript...</div>`;
+
+  try {
+    await sendMessage({ type: "STOP_MEETING_CAPTURE" });
+    await refreshMeetingStatus();
+
+    setTimeout(async () => {
+      await refreshMeetingStatus();
+      await loadLatestMeeting();
+    }, 3000);
+  } catch (e) {
+    box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
+    await refreshMeetingStatus();
+  }
+}
+
 async function refreshMeetingStatus() {
   try {
     const res = await sendMessage({ type: "GET_MEETING_STATUS" });
-    document.getElementById("meetingStatus").textContent = `Status: ${res.status || "idle"}`;
+
+    let text = `Status: ${res.status || "idle"}`;
+    if (res.lastError) {
+      text += ` • ${res.lastError}`;
+    }
+
+    document.getElementById("meetingStatus").textContent = text;
+    return res;
   } catch (e) {
     document.getElementById("meetingStatus").textContent = `Status error: ${e.message}`;
+    return { status: "error", lastError: e.message };
   }
 }
 
@@ -257,16 +285,30 @@ async function loadLatestMeeting() {
       return;
     }
     const notes = meeting.notes || {};
+    const warnings = Array.isArray(notes.warnings) ? notes.warnings : [];
     box.innerHTML = `
       <div class="item">
         <strong>${escapeHtml(meeting.page_title || "Meeting")}</strong>
         <div class="subtle">${escapeHtml(meeting.created_at || "")}</div>
         <pre>${escapeHtml(notes.summary || "No summary.")}</pre>
+        ${warnings.length ? `<div class="subtle">Warnings: ${escapeHtml(warnings.join(" | "))}</div>` : ""}
       </div>
     `;
   } catch (e) {
     box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+function startMeetingPolling() {
+  if (meetingPollHandle) clearInterval(meetingPollHandle);
+  meetingPollHandle = setInterval(async () => {
+    const status = await refreshMeetingStatus();
+    if (status.status === "idle" || status.status === "error") {
+      await loadLatestMeeting();
+      clearInterval(meetingPollHandle);
+      meetingPollHandle = null;
+    }
+  }, 2000);
 }
 
 function renderDraft(result) {

@@ -1,14 +1,5 @@
 """
 Meeting recording + transcription service.
-
-WHAT THIS FILE DOES
-1. Saves uploaded meeting audio files
-2. Sends them to the transcription provider when configured
-3. Returns transcript text plus warnings if transcription is unavailable
-
-WHY THIS FILE EXISTS
-The extension can record meeting/tab audio, but the backend is the right place
-to store files and call speech-to-text services securely.
 """
 
 from __future__ import annotations
@@ -22,9 +13,21 @@ import requests
 
 from app.services.store import save_uploaded_meeting_file
 
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
+
+
+def get_openai_api_key() -> str:
+    return os.getenv("OPENAI_API_KEY", "").strip()
+
+
+def get_ai_status() -> Dict[str, Any]:
+    key = get_openai_api_key()
+    return {
+        "provider": "openai",
+        "configured": bool(key),
+        "transcription_enabled": bool(key),
+        "notes_enabled": bool(key),
+    }
 
 
 def save_meeting_upload(file_name: str, content: bytes) -> Dict[str, str]:
@@ -32,18 +35,15 @@ def save_meeting_upload(file_name: str, content: bytes) -> Dict[str, str]:
 
 
 def transcribe_audio_file(absolute_path: str) -> Dict[str, Any]:
-    """
-    STEP 1: If no API key exists, skip transcription gracefully.
-    WHY:
-    The app should still save the meeting recording even without AI configured.
-    """
-    if not OPENAI_API_KEY:
+    openai_api_key = get_openai_api_key()
+
+    if not openai_api_key:
         return {
             "status": "skipped",
             "provider": "none",
             "text": "",
             "warnings": [
-                "OPENAI_API_KEY is not set on the backend, so transcript generation was skipped."
+                "OPENAI_API_KEY is not loaded on the backend, so transcript generation was skipped."
             ],
         }
 
@@ -64,7 +64,7 @@ def transcribe_audio_file(absolute_path: str) -> Dict[str, Any]:
             response = requests.post(
                 OPENAI_TRANSCRIBE_URL,
                 headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Authorization": f"Bearer {openai_api_key}",
                 },
                 files={
                     "file": (path.name, file_handle, mime_type),

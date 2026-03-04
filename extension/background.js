@@ -14,16 +14,16 @@ chrome.runtime.onInstalled.addListener(async () => {
     await storageSet("sync", { continuum_settings: DEFAULT_SETTINGS });
   }
 
-  if (chrome.sidePanel?.setOptions) {
-    try {
-      await chrome.sidePanel.setOptions({
-        path: "sidepanel.html",
-        enabled: true
-      });
-    } catch (error) {
-      console.warn("Continuum side panel init warning:", error);
-    }
-  }
+  await storageSet("local", {
+    continuum_offscreen_ready: false
+  });
+});
+
+chrome.runtime.onStartup?.addListener(async () => {
+  // Also reset on browser startup to avoid stale state.
+  await storageSet("local", {
+    continuum_offscreen_ready: false
+  });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -311,8 +311,41 @@ async function getCaptureIntent(sessionId) {
 }
 
 async function ensureOffscreenDocument() {
-  const existing = await storageGet("local", "continuum_offscreen_ready");
-  if (existing.continuum_offscreen_ready) return;
+  /*
+    WHAT THIS FIXES
+    1. Detects whether a real offscreen document actually exists
+    2. Recreates it if the stored ready flag is stale
+    3. Waits until OFFSCREEN_READY is received
+    4. Verifies the offscreen doc can actually answer messages
+
+  */
+
+  const hasWorkingOffscreen = await pingOffscreen();
+  if (hasWorkingOffscreen) {
+    return;
+  }
+
+  await storageSet("local", { continuum_offscreen_ready: false });
+
+  
+  if (chrome.runtime.getContexts) {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"]
+    });
+
+    const hasOffscreenContext = contexts.some(
+      (ctx) => ctx.documentUrl && ctx.documentUrl.includes("offscreen.html")
+    );
+
+    // If one exists but isn't responding, try closing it first.
+    if (hasOffscreenContext && chrome.offscreen?.closeDocument) {
+      try {
+        await chrome.offscreen.closeDocument();
+      } catch (error) {
+        // ignore close errors
+      }
+    }
+  }
 
   try {
     await chrome.offscreen.createDocument({
@@ -322,97 +355,206 @@ async function ensureOffscreenDocument() {
     });
   } catch (e) {
     const msg = e?.message ? e.message : String(e);
-    if (!msg.toLowerCase().includes("exists")) throw e;
+
+    
+    if (!msg.toLowerCase().includes("exists")) {
+      throw e;
+    }
   }
 
-  for (let i = 0; i < 20; i++) {
-    const r = await storageGet("local", "continuum_offscreen_ready");
-    if (r.continuum_offscreen_ready) return;
+  
+  for (let i = 0; i < 30; i++) {
+    const stored = await storageGet("local", "continuum_offscreen_ready");
+    if (stored.continuum_offscreen_ready) {
+      break;
+    }
     await sleep(100);
   }
 
-  throw new Error("Offscreen recorder did not become ready. Reload the extension and try again.");
+  
+  const reachable = await pingOffscreen();
+  if (!reachable) {
+    await storageSet("local", { continuum_offscreen_ready: false });
+    throw new Error(
+      "Offscreen recorder did not become reachable. Reload the extension and try again."
+    );
+  }
 }
 
 async function sendToOffscreen(type, payload) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage({ to: "offscreen", type, payload }, (res) => {
-      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      if (chrome.runtime.lastError) {
+        return reject(new Error(chrome.runtime.lastError.message));
+      }
+
+      if (!res) {
+        return reject(new Error("No response from offscreen recorder."));
+      }
+
+      if (res.ok === false && res.error) {
+        return reject(new Error(res.error));
+      }
+
       resolve(res);
     });
   });
 }
 
+async function pingOffscreen() {
+  try {
+    const response = await sendToOffscreen("OFFSCREEN_PING", {});
+    return Boolean(response && response.ok);
+  } catch (error) {
+    return false;
+  }
+}
+
 async function startMeetingCaptureForActiveTab() {
   const state =
     (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
-  if (state.status === "recording") return { ok: true, ...state };
+
+  if (state.status === "recording") {
+    return { ok: true, ...state };
+  }
 
   const s = await getSettings();
   const tab = await getActiveTab();
-  if (!tab?.id) throw new Error("No active tab found.");
-
-  await ensureOffscreenDocument();
+  if (!tab?.id) {
+    throw new Error("No active tab found.");
+  }
 
   const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
-  const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
 
-  await sendToOffscreen("OFFSCREEN_PING", {});
-  await sendToOffscreen("OFFSCREEN_START_RECORDING", {
-    streamId,
-    sessionId: sessionInfo.sessionId,
-    tabId: tab.id,
-    backendBaseUrl: s.backendBaseUrl,
-    pageUrl: tab.url || "",
-    pageTitle: tab.title || ""
+  // Mark state early so UI shows progress
+  await storageSet("local", {
+    continuum_meeting_state: {
+      status: "arming",
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      lastError: ""
+    }
   });
 
-  const next = {
-    status: "recording",
-    sessionId: sessionInfo.sessionId,
-    tabId: tab.id,
-    startedAt: Date.now()
-  };
-  await storageSet("local", { continuum_meeting_state: next });
-  await chrome.action.setBadgeText({ text: "REC", tabId: tab.id });
+  try {
+    await ensureOffscreenDocument();
 
-  return { ok: true, ...next };
+    const streamId = await chrome.tabCapture.getMediaStreamId({
+      targetTabId: tab.id
+    });
+
+    await sendToOffscreen("OFFSCREEN_START_RECORDING", {
+      streamId,
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      backendBaseUrl: s.backendBaseUrl,
+      pageUrl: tab.url || "",
+      pageTitle: tab.title || ""
+    });
+
+    const next = {
+      status: "recording",
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      lastError: ""
+    };
+
+    await storageSet("local", { continuum_meeting_state: next });
+    await chrome.action.setBadgeText({ text: "REC", tabId: tab.id });
+
+    return { ok: true, ...next };
+  } catch (error) {
+    const message = error?.message ? error.message : String(error);
+
+    await storageSet("local", {
+      continuum_meeting_state: {
+        status: "error",
+        sessionId: sessionInfo.sessionId,
+        tabId: tab.id,
+        startedAt: Date.now(),
+        lastError: message
+      }
+    });
+
+    throw error;
+  }
 }
 
 async function stopMeetingCapture() {
   const state =
     (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
-  if (state.status !== "recording") return { ok: true, status: "idle" };
 
-  await sendToOffscreen("OFFSCREEN_STOP_RECORDING", {});
-  const next = { ...state, status: "saving" };
+  if (state.status !== "recording") {
+    return { ok: true, status: "idle" };
+  }
+
+  try {
+    await sendToOffscreen("OFFSCREEN_STOP_RECORDING", {});
+  } catch (error) {
+    const message = error?.message ? error.message : String(error);
+
+    await storageSet("local", {
+      continuum_meeting_state: {
+        ...state,
+        status: "error",
+        lastError: message
+      }
+    });
+
+    throw error;
+  }
+
+  const next = {
+    ...state,
+    status: "saving",
+    lastError: ""
+  };
+
   await storageSet("local", { continuum_meeting_state: next });
 
   if (typeof state.tabId === "number") {
     await chrome.action.setBadgeText({ text: "...", tabId: state.tabId });
   }
+
   return { ok: true, ...next };
 }
 
 async function handleOffscreenMeetingComplete(payload) {
   const latest =
     (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
+
+  const currentState =
+    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+
+  if (typeof currentState.tabId === "number") {
+    await chrome.action.setBadgeText({ text: "", tabId: currentState.tabId });
+  }
+
   if (payload?.meeting?.session_id) {
     latest[payload.meeting.session_id] = payload.meeting;
     await storageSet("local", { continuum_latest_meetings: latest });
-  }
 
-  const state =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
-  if (typeof state.tabId === "number") {
-    await chrome.action.setBadgeText({ text: "", tabId: state.tabId });
+    await storageSet("local", {
+      continuum_meeting_state: {
+        status: "idle",
+        sessionId: payload.meeting.session_id,
+        lastCompletedAt: Date.now(),
+        lastError: ""
+      }
+    });
+
+    return;
   }
 
   await storageSet("local", {
     continuum_meeting_state: {
-      status: "idle",
-      sessionId: payload?.meeting?.session_id || null,
-      lastCompletedAt: Date.now()
+      status: "error",
+      sessionId: currentState.sessionId || null,
+      lastCompletedAt: Date.now(),
+      lastError:
+        payload?.error || "Meeting capture finished without returning a meeting record."
     }
   });
 }
@@ -420,8 +562,10 @@ async function handleOffscreenMeetingComplete(payload) {
 async function getMeetingStatus() {
   const state =
     (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {
-      status: "idle"
+      status: "idle",
+      lastError: ""
     };
+
   return { ok: true, ...state };
 }
 

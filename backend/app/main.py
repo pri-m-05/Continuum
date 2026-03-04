@@ -1,22 +1,20 @@
-"""
-FASTAPI ENTRYPOINT
-"""
-
 from __future__ import annotations
+
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load backend/.env before importing services that read environment variables.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import (
-    AuditRequest,
-    AutomationRequest,
-    GenerateRequest,
-    IngestRequest,
-)
+from app.models import AuditRequest, AutomationRequest, GenerateRequest, IngestRequest
 from app.services.audit import run_audit
 from app.services.automation import suggest_automation
 from app.services.docs import actions_to_steps, dedupe_actions, generate_document_options
-from app.services.meetings import save_meeting_upload, transcribe_audio_file
+from app.services.meetings import get_ai_status, save_meeting_upload, transcribe_audio_file
 from app.services.notes import build_meeting_notes
 from app.services.store import (
     ensure_store_exists,
@@ -32,7 +30,7 @@ from app.services.store import (
     upsert_session,
 )
 
-app = FastAPI(title="Continuum API", version="1.2.0")
+app = FastAPI(title="Continuum API", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,161 +40,89 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 def startup_event():
     ensure_store_exists()
 
-
 @app.get("/")
 def root():
-    return {
-        "ok": True,
-        "service": "continuum-api",
-        "version": "1.2.0",
-        "routes": [
-            "/health",
-            "/ingest-actions",
-            "/docs/generate",
-            "/docs/search",
-            "/docs/latest",
-            "/audit-check",
-            "/automate-step",
-            "/sessions/screenshot",
-            "/sessions/evidence-summary",
-            "/sessions/latest-screenshot",
-            "/meetings/upload",
-            "/meetings/latest",
-        ],
-    }
-
+    return {"ok": True, "service": "continuum-api", "version": "1.3.0"}
 
 @app.get("/health")
 def health():
     return {"ok": True, "service": "continuum-api"}
 
+@app.get("/config/status")
+def config_status():
+    ai = get_ai_status()
+    return {
+        "ok": True,
+        "backend_env_loaded": True,
+        "ai": ai,
+        "meeting_features": {
+            "transcription": ai["transcription_enabled"],
+            "follow_up_notes": ai["notes_enabled"],
+        },
+    }
 
 @app.post("/ingest-actions")
 def ingest_actions(payload: IngestRequest):
     actions = [action.model_dump() for action in payload.actions]
     page = payload.page.model_dump()
     intent = payload.intent.model_dump() if payload.intent else None
-
     cleaned_actions = dedupe_actions(actions)
     steps = actions_to_steps(cleaned_actions, page)
-
-    upsert_session(
-        session_id=payload.session_id,
-        page=page,
-        actions=cleaned_actions,
-        steps=steps,
-    )
-
+    upsert_session(session_id=payload.session_id, page=page, actions=cleaned_actions, steps=steps)
     evidence = get_session_evidence_summary(payload.session_id)
-
-    documents = generate_document_options(
-        session_id=payload.session_id,
-        page=page,
-        steps=steps,
-        evidence=evidence,
-        intent=intent,
-    )
-
+    documents = generate_document_options(session_id=payload.session_id, page=page, steps=steps, evidence=evidence, intent=intent)
     rules = payload.rules.model_dump() if payload.rules else None
     audit = run_audit(documents[0]["content"], rules)
     saved_documents = save_documents(payload.session_id, documents, audit)
-
-    return {
-        "ok": True,
-        "session_id": payload.session_id,
-        "steps": steps,
-        "primary_document": saved_documents[0] if saved_documents else None,
-        "options": saved_documents,
-        "audit": audit,
-    }
-
+    return {"ok": True, "session_id": payload.session_id, "steps": steps, "primary_document": saved_documents[0] if saved_documents else None, "options": saved_documents, "audit": audit}
 
 @app.post("/docs/generate")
 def generate_docs(payload: GenerateRequest):
     session = get_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found.")
-
     page = session.get("page", {})
     steps = session.get("steps", [])
     evidence = get_session_evidence_summary(payload.session_id)
     intent = payload.intent.model_dump() if payload.intent else None
-
-    documents = generate_document_options(
-        payload.session_id,
-        page,
-        steps,
-        evidence=evidence,
-        intent=intent,
-    )
-
+    documents = generate_document_options(payload.session_id, page, steps, evidence=evidence, intent=intent)
     rules = payload.rules.model_dump() if payload.rules else None
     audit = run_audit(documents[0]["content"], rules)
     saved_documents = save_documents(payload.session_id, documents, audit)
-
-    return {
-        "ok": True,
-        "session_id": payload.session_id,
-        "steps": steps,
-        "primary_document": saved_documents[0] if saved_documents else None,
-        "options": saved_documents,
-        "audit": audit,
-    }
-
+    return {"ok": True, "session_id": payload.session_id, "steps": steps, "primary_document": saved_documents[0] if saved_documents else None, "options": saved_documents, "audit": audit}
 
 @app.get("/docs/search")
 def docs_search(query: str = Query(default="")):
     items = search_documents(query)
-    return {
-        "ok": True,
-        "items": items,
-        "count": len(items),
-    }
-
+    return {"ok": True, "items": items, "count": len(items)}
 
 @app.get("/docs/latest")
 def docs_latest(session_id: str | None = None):
     item = get_latest_document(session_id=session_id)
-    return {
-        "ok": True,
-        "item": item,
-    }
-
+    return {"ok": True, "item": item}
 
 @app.post("/audit-check")
 def audit_check(payload: AuditRequest):
     rules = payload.rules.model_dump() if payload.rules else None
     result = run_audit(payload.content, rules)
-    return {
-        "ok": True,
-        **result,
-    }
-
+    return {"ok": True, **result}
 
 @app.post("/automate-step")
 def automate_step(payload: AutomationRequest):
     session = get_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found.")
-
     suggestions = suggest_automation(payload.session_id)
-    return {
-        "ok": True,
-        "session_id": payload.session_id,
-        "suggestions": suggestions,
-    }
-
+    return {"ok": True, "session_id": payload.session_id, "suggestions": suggestions}
 
 @app.get("/sessions/evidence-summary")
 def evidence_summary(session_id: str):
     summary = get_session_evidence_summary(session_id)
     return {"ok": True, "summary": summary}
-
 
 @app.post("/sessions/screenshot")
 def sessions_screenshot(payload: dict):
@@ -207,82 +133,34 @@ def sessions_screenshot(payload: dict):
     caption = str(payload.get("caption", "")).strip()
     recommended = bool(payload.get("recommended", False))
     step_index = int(payload.get("step_index", 0) or 0)
-
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
     if not data_url:
         raise HTTPException(status_code=400, detail="data_url is required.")
-
-    screenshot = save_screenshot(
-        session_id=session_id,
-        page_url=page_url,
-        page_title=page_title,
-        data_url=data_url,
-        caption=caption,
-        recommended=recommended,
-        step_index=step_index,
-    )
-
-    return {
-        "ok": True,
-        "screenshot": screenshot,
-    }
-
+    screenshot = save_screenshot(session_id=session_id, page_url=page_url, page_title=page_title, data_url=data_url, caption=caption, recommended=recommended, step_index=step_index)
+    return {"ok": True, "screenshot": screenshot}
 
 @app.get("/sessions/latest-screenshot")
 def sessions_latest_screenshot(session_id: str | None = None):
     item = get_latest_screenshot(session_id=session_id)
-    return {
-        "ok": True,
-        "screenshot": item,
-    }
-
+    return {"ok": True, "screenshot": item}
 
 @app.post("/meetings/upload")
-async def meetings_upload(
-    session_id: str = Form(...),
-    tab_id: str = Form(default=""),
-    page_url: str = Form(default=""),
-    page_title: str = Form(default=""),
-    file: UploadFile = File(...),
-):
+async def meetings_upload(session_id: str = Form(...), tab_id: str = Form(default=""), page_url: str = Form(default=""), page_title: str = Form(default=""), file: UploadFile = File(...)):
     content = await file.read()
-
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded meeting file is empty.")
-
     saved_file = save_meeting_upload(file_name=file.filename or "meeting.webm", content=content)
     transcription = transcribe_audio_file(saved_file["absolute_path"])
     transcript_text = transcription.get("text", "") or ""
-
     notes = build_meeting_notes(transcript=transcript_text, page_title=page_title)
-
     for warning in transcription.get("warnings", []):
         notes.setdefault("warnings", [])
         notes["warnings"].append(warning)
-
-    meeting = save_meeting_record(
-        session_id=session_id,
-        tab_id=tab_id,
-        page_url=page_url,
-        page_title=page_title,
-        file_name=saved_file["file_name"],
-        relative_path=saved_file["relative_path"],
-        mime_type=file.content_type or "audio/webm",
-        transcript=transcript_text,
-        notes=notes,
-    )
-
-    return {
-        "ok": True,
-        "meeting": meeting,
-    }
-
+    meeting = save_meeting_record(session_id=session_id, tab_id=tab_id, page_url=page_url, page_title=page_title, file_name=saved_file["file_name"], relative_path=saved_file["relative_path"], mime_type=file.content_type or "audio/webm", transcript=transcript_text, notes=notes)
+    return {"ok": True, "meeting": meeting}
 
 @app.get("/meetings/latest")
 def meetings_latest(session_id: str | None = None):
     meeting = get_latest_meeting(session_id=session_id)
-    return {
-        "ok": True,
-        "meeting": meeting,
-    }
+    return {"ok": True, "meeting": meeting}

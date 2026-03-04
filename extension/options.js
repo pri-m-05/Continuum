@@ -1,23 +1,7 @@
-/*
-  OPTIONS PAGE
-
-  WHAT THIS FILE DOES
-  1. Loads the current saved settings
-  2. Lets the user change backend URL and audit rules
-  3. Saves those settings to chrome.storage.sync
-
-*/
-
 const DEFAULT_SETTINGS = {
   backendBaseUrl: "http://127.0.0.1:8000",
   auditRules: {
-    required_sections: [
-      "Purpose",
-      "Preconditions",
-      "Procedure",
-      "Controls",
-      "Evidence"
-    ],
+    required_sections: ["Purpose", "Preconditions", "Procedure", "Controls", "Evidence"],
     required_keywords: [],
     prohibited_words: []
   },
@@ -26,7 +10,9 @@ const DEFAULT_SETTINGS = {
 
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("saveBtn").addEventListener("click", saveSettings);
+  document.getElementById("refreshAiStatusBtn").addEventListener("click", refreshAiStatus);
   await loadSettings();
+  await refreshAiStatus();
 });
 
 async function loadSettings() {
@@ -41,12 +27,9 @@ async function loadSettings() {
   };
 
   document.getElementById("backendBaseUrl").value = settings.backendBaseUrl || "";
-  document.getElementById("requiredSections").value =
-    (settings.auditRules.required_sections || []).join("\n");
-  document.getElementById("requiredKeywords").value =
-    (settings.auditRules.required_keywords || []).join("\n");
-  document.getElementById("prohibitedWords").value =
-    (settings.auditRules.prohibited_words || []).join("\n");
+  document.getElementById("requiredSections").value = (settings.auditRules.required_sections || []).join("\n");
+  document.getElementById("requiredKeywords").value = (settings.auditRules.required_keywords || []).join("\n");
+  document.getElementById("prohibitedWords").value = (settings.auditRules.prohibited_words || []).join("\n");
   document.getElementById("captureInputValues").checked = Boolean(settings.captureInputValues);
 }
 
@@ -67,28 +50,35 @@ async function saveSettings() {
     }
   };
 
-  await storageSet({
-    continuum_settings: settings
-  });
-
+  await storageSet({ continuum_settings: settings });
   document.getElementById("status").textContent = "Settings saved.";
+  await refreshAiStatus();
+}
+
+async function refreshAiStatus() {
+  const statusEl = document.getElementById("aiStatusText");
+  const backendBaseUrl = document.getElementById("backendBaseUrl").value.trim() || DEFAULT_SETTINGS.backendBaseUrl;
+  statusEl.textContent = "Checking backend AI configuration...";
+
+  try {
+    const response = await fetch(`${backendBaseUrl}/config/status`);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || `Request failed: ${response.status}`);
+    }
+
+    if (data.ai?.configured) {
+      statusEl.textContent = "OpenAI key detected on backend. Meeting transcription and follow-up notes are enabled.";
+    } else {
+      statusEl.textContent = "OpenAI key is NOT loaded on the backend. Meeting recordings can save, but transcription and AI follow-up notes are disabled.";
+    }
+  } catch (error) {
+    statusEl.textContent = `Could not check backend AI status: ${error.message}`;
+  }
 }
 
 function parseLines(value) {
-  return String(value || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  return String(value || "").split("\n").map((line) => line.trim()).filter(Boolean);
 }
-
-function storageGet(key) {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(key, resolve);
-  });
-}
-
-function storageSet(value) {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set(value, resolve);
-  });
-}
+function storageGet(key) { return new Promise((resolve) => chrome.storage.sync.get(key, resolve)); }
+function storageSet(value) { return new Promise((resolve) => chrome.storage.sync.set(value, resolve)); }

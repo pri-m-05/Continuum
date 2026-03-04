@@ -644,5 +644,48 @@
       "created_at": "2026-03-03T20:41:20.743454+00:00"
     }
   ],
-  "meetings": []
+  "meetings": [
+    {
+      "meeting_id": "meeting_1932afe0c21549848ba10275b59a0137",
+      "session_id": "session_1772660128288_0fcflapw",
+      "tab_id": "620604655",
+      "page_url": "https://meet.google.com/atf-fepz-fdn?authuser=0",
+      "page_title": "Meet - atf-fepz-fdn",
+      "file_name": "meeting_a5bcbc15d0bd4c6dade789fbe4ffa7a1.webm",
+      "relative_path": "data/meetings/meeting_a5bcbc15d0bd4c6dade789fbe4ffa7a1.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "",
+      "notes": {
+        "summary": "No transcript available.",
+        "decisions": [],
+        "action_items": [],
+        "follow_up_questions": [],
+        "warnings": [
+          "Transcript text was empty, so follow-up notes could not be generated."
+        ]
+      },
+      "created_at": "2026-03-04T21:35:51.788028+00:00"
+    },
+    {
+      "meeting_id": "meeting_393cf68bd49c4332977f265f42e1818d",
+      "session_id": "session_1772660128288_0fcflapw",
+      "tab_id": "620604655",
+      "page_url": "https://meet.google.com/atf-fepz-fdn?authuser=0",
+      "page_title": "Meet - atf-fepz-fdn",
+      "file_name": "meeting_a8034ce9dd2a4a51bb1f039b7c81b278.webm",
+      "relative_path": "data/meetings/meeting_a8034ce9dd2a4a51bb1f039b7c81b278.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "",
+      "notes": {
+        "summary": "No transcript available.",
+        "decisions": [],
+        "action_items": [],
+        "follow_up_questions": [],
+        "warnings": [
+          "Transcript text was empty, so follow-up notes could not be generated."
+        ]
+      },
+      "created_at": "2026-03-04T21:36:11.306423+00:00"
+    }
+  ]
 }

@@ -1,15 +1,5 @@
 """
 Meeting notes generation service.
-
-WHAT THIS FILE DOES
-1. Turns transcript text into:
-   - summary
-   - decisions
-   - action items
-   - follow-up questions
-2. Uses OpenAI when configured
-3. Falls back to heuristic extraction when AI is unavailable
-
 """
 
 from __future__ import annotations
@@ -21,13 +11,14 @@ from typing import Any, Dict, List
 
 import requests
 
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 
 
+def get_openai_api_key() -> str:
+    return os.getenv("OPENAI_API_KEY", "").strip()
+
+
 def build_meeting_notes(transcript: str, page_title: str = "") -> Dict[str, Any]:
-    
     if not transcript.strip():
         return {
             "summary": "No transcript available.",
@@ -39,26 +30,29 @@ def build_meeting_notes(transcript: str, page_title: str = "") -> Dict[str, Any]
             ],
         }
 
-    if OPENAI_API_KEY:
+    if get_openai_api_key():
         ai_result = _generate_notes_with_openai(transcript=transcript, page_title=page_title)
         if ai_result.get("ok"):
             return ai_result["notes"]
 
     heuristic = _generate_notes_heuristically(transcript=transcript, page_title=page_title)
     heuristic.setdefault("warnings", [])
-    if OPENAI_API_KEY:
+    if get_openai_api_key():
         heuristic["warnings"].append(
             "OpenAI notes generation failed, so heuristic note extraction was used instead."
         )
     else:
         heuristic["warnings"].append(
-            "OPENAI_API_KEY is not set on the backend, so heuristic note extraction was used."
+            "OPENAI_API_KEY is not loaded on the backend, so heuristic note extraction was used."
         )
     return heuristic
 
 
 def _generate_notes_with_openai(transcript: str, page_title: str = "") -> Dict[str, Any]:
-    
+    openai_api_key = get_openai_api_key()
+    if not openai_api_key:
+        return {"ok": False, "error": "Missing OPENAI_API_KEY"}
+
     system_prompt = """
 You are a meeting-notes assistant.
 Return ONLY valid JSON with this exact structure:
@@ -88,7 +82,7 @@ Transcript:
         response = requests.post(
             OPENAI_CHAT_COMPLETIONS_URL,
             headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Authorization": f"Bearer {openai_api_key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -126,7 +120,6 @@ Transcript:
 
 
 def _generate_notes_heuristically(transcript: str, page_title: str = "") -> Dict[str, Any]:
-   
     sentences = _split_sentences(transcript)
     summary = " ".join(sentences[:5]).strip()
     if not summary:
@@ -136,44 +129,15 @@ def _generate_notes_heuristically(transcript: str, page_title: str = "") -> Dict
     action_items = []
     follow_up_questions = []
 
-    decision_markers = [
-        "decided",
-        "agreed",
-        "approved",
-        "resolved",
-        "we will",
-        "we'll",
-    ]
-
-    action_markers = [
-        "action item",
-        "todo",
-        "to do",
-        "next step",
-        "follow up",
-        "i will",
-        "i'll",
-        "we need to",
-        "please send",
-        "please share",
-        "schedule",
-    ]
+    decision_markers = ["decided", "agreed", "approved", "resolved", "we will", "we'll"]
+    action_markers = ["action item", "todo", "to do", "next step", "follow up", "i will", "i'll", "we need to", "please send", "please share", "schedule"]
 
     for sentence in sentences:
         lowered = sentence.lower()
-
         if any(marker in lowered for marker in decision_markers):
             decisions.append(sentence)
-
         if any(marker in lowered for marker in action_markers):
-            action_items.append(
-                {
-                    "owner": "Unassigned",
-                    "task": sentence,
-                    "due_date": "",
-                }
-            )
-
+            action_items.append({"owner": "Unassigned", "task": sentence, "due_date": ""})
         if "?" in sentence:
             follow_up_questions.append(sentence)
 
@@ -200,19 +164,15 @@ def _clean_str_list(values: Any) -> List[str]:
 def _clean_action_items(values: Any) -> List[Dict[str, str]]:
     if not isinstance(values, list):
         return []
-
     cleaned: List[Dict[str, str]] = []
     for item in values:
         if not isinstance(item, dict):
             continue
-        cleaned.append(
-            {
-                "owner": str(item.get("owner", "Unassigned") or "Unassigned").strip(),
-                "task": str(item.get("task", "")).strip(),
-                "due_date": str(item.get("due_date", "")).strip(),
-            }
-        )
-
+        cleaned.append({
+            "owner": str(item.get("owner", "Unassigned") or "Unassigned").strip(),
+            "task": str(item.get("task", "")).strip(),
+            "due_date": str(item.get("due_date", "")).strip(),
+        })
     return [item for item in cleaned if item["task"]]
 
 

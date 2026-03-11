@@ -146,18 +146,65 @@ def sessions_latest_screenshot(session_id: str | None = None):
     return {"ok": True, "screenshot": item}
 
 @app.post("/meetings/upload")
-async def meetings_upload(session_id: str = Form(...), tab_id: str = Form(default=""), page_url: str = Form(default=""), page_title: str = Form(default=""), file: UploadFile = File(...)):
+async def meetings_upload(
+    session_id: str = Form(...),
+    tab_id: str = Form(default=""),
+    page_url: str = Form(default=""),
+    page_title: str = Form(default=""),
+    mic_ok: str = Form(default="false"),
+    tab_level: str = Form(default="0"),
+    mic_level: str = Form(default="0"),
+    file: UploadFile = File(...),
+):
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded meeting file is empty.")
+
     saved_file = save_meeting_upload(file_name=file.filename or "meeting.webm", content=content)
+
     transcription = transcribe_audio_file(saved_file["absolute_path"])
     transcript_text = transcription.get("text", "") or ""
+
     notes = build_meeting_notes(transcript=transcript_text, page_title=page_title)
-    for warning in transcription.get("warnings", []):
-        notes.setdefault("warnings", [])
-        notes["warnings"].append(warning)
-    meeting = save_meeting_record(session_id=session_id, tab_id=tab_id, page_url=page_url, page_title=page_title, file_name=saved_file["file_name"], relative_path=saved_file["relative_path"], mime_type=file.content_type or "audio/webm", transcript=transcript_text, notes=notes)
+    notes.setdefault("warnings", [])
+
+    # Add transcription warnings
+    for w in transcription.get("warnings", []):
+        notes["warnings"].append(w)
+
+    # Add audio diagnostics
+    try:
+        tab_level_f = float(tab_level or "0")
+    except:
+        tab_level_f = 0.0
+    try:
+        mic_level_f = float(mic_level or "0")
+    except:
+        mic_level_f = 0.0
+
+    mic_ok_bool = (mic_ok or "").lower() == "true"
+
+    if not mic_ok_bool:
+        notes["warnings"].append("Microphone stream was not captured (permission missing or blocked).")
+
+    if tab_level_f < 0.01 and mic_level_f < 0.01:
+        notes["warnings"].append("Audio levels were very low (recording likely silent).")
+
+    if not transcript_text.strip():
+        notes["warnings"].append("Transcript was empty. Usually means silent recording or transcription not configured.")
+
+    meeting = save_meeting_record(
+        session_id=session_id,
+        tab_id=tab_id,
+        page_url=page_url,
+        page_title=page_title,
+        file_name=saved_file["file_name"],
+        relative_path=saved_file["relative_path"],
+        mime_type=file.content_type or "audio/webm",
+        transcript=transcript_text,
+        notes=notes,
+    )
+
     return {"ok": True, "meeting": meeting}
 
 @app.get("/meetings/latest")

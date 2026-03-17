@@ -28,6 +28,8 @@ from app.services.store import (
     save_screenshot,
     search_documents,
     upsert_session,
+    list_meetings,
+    search_meetings,
 )
 
 app = FastAPI(title="Continuum API", version="1.3.0")
@@ -70,15 +72,29 @@ def ingest_actions(payload: IngestRequest):
     actions = [action.model_dump() for action in payload.actions]
     page = payload.page.model_dump()
     intent = payload.intent.model_dump() if payload.intent else None
+
     cleaned_actions = dedupe_actions(actions)
     steps = actions_to_steps(cleaned_actions, page)
+
     upsert_session(session_id=payload.session_id, page=page, actions=cleaned_actions, steps=steps)
+
     evidence = get_session_evidence_summary(payload.session_id)
-    documents = generate_document_options(session_id=payload.session_id, page=page, steps=steps, evidence=evidence, intent=intent)
+    documents = generate_document_options(
+        session_id=payload.session_id, page=page, steps=steps, evidence=evidence, intent=intent
+    )
+
     rules = payload.rules.model_dump() if payload.rules else None
     audit = run_audit(documents[0]["content"], rules)
     saved_documents = save_documents(payload.session_id, documents, audit)
-    return {"ok": True, "session_id": payload.session_id, "steps": steps, "primary_document": saved_documents[0] if saved_documents else None, "options": saved_documents, "audit": audit}
+
+    return {
+        "ok": True,
+        "session_id": payload.session_id,
+        "steps": steps,
+        "primary_document": saved_documents[0] if saved_documents else None,
+        "options": saved_documents,
+        "audit": audit,
+    }
 
 @app.post("/docs/generate")
 def generate_docs(payload: GenerateRequest):
@@ -89,11 +105,21 @@ def generate_docs(payload: GenerateRequest):
     steps = session.get("steps", [])
     evidence = get_session_evidence_summary(payload.session_id)
     intent = payload.intent.model_dump() if payload.intent else None
+
     documents = generate_document_options(payload.session_id, page, steps, evidence=evidence, intent=intent)
+
     rules = payload.rules.model_dump() if payload.rules else None
     audit = run_audit(documents[0]["content"], rules)
     saved_documents = save_documents(payload.session_id, documents, audit)
-    return {"ok": True, "session_id": payload.session_id, "steps": steps, "primary_document": saved_documents[0] if saved_documents else None, "options": saved_documents, "audit": audit}
+
+    return {
+        "ok": True,
+        "session_id": payload.session_id,
+        "steps": steps,
+        "primary_document": saved_documents[0] if saved_documents else None,
+        "options": saved_documents,
+        "audit": audit,
+    }
 
 @app.get("/docs/search")
 def docs_search(query: str = Query(default="")):
@@ -133,11 +159,21 @@ def sessions_screenshot(payload: dict):
     caption = str(payload.get("caption", "")).strip()
     recommended = bool(payload.get("recommended", False))
     step_index = int(payload.get("step_index", 0) or 0)
+
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required.")
     if not data_url:
         raise HTTPException(status_code=400, detail="data_url is required.")
-    screenshot = save_screenshot(session_id=session_id, page_url=page_url, page_title=page_title, data_url=data_url, caption=caption, recommended=recommended, step_index=step_index)
+
+    screenshot = save_screenshot(
+        session_id=session_id,
+        page_url=page_url,
+        page_title=page_title,
+        data_url=data_url,
+        caption=caption,
+        recommended=recommended,
+        step_index=step_index,
+    )
     return {"ok": True, "screenshot": screenshot}
 
 @app.get("/sessions/latest-screenshot")
@@ -151,6 +187,7 @@ async def meetings_upload(
     tab_id: str = Form(default=""),
     page_url: str = Form(default=""),
     page_title: str = Form(default=""),
+    notes_style: str = Form(default="professional_bullets"),
     mic_ok: str = Form(default="false"),
     tab_level: str = Form(default="0"),
     mic_level: str = Form(default="0"),
@@ -165,33 +202,11 @@ async def meetings_upload(
     transcription = transcribe_audio_file(saved_file["absolute_path"])
     transcript_text = transcription.get("text", "") or ""
 
-    notes = build_meeting_notes(transcript=transcript_text, page_title=page_title)
+    notes = build_meeting_notes(transcript=transcript_text, page_title=page_title, style=notes_style)
     notes.setdefault("warnings", [])
 
-    # Add transcription warnings
     for w in transcription.get("warnings", []):
         notes["warnings"].append(w)
-
-    # Add audio diagnostics
-    try:
-        tab_level_f = float(tab_level or "0")
-    except:
-        tab_level_f = 0.0
-    try:
-        mic_level_f = float(mic_level or "0")
-    except:
-        mic_level_f = 0.0
-
-    mic_ok_bool = (mic_ok or "").lower() == "true"
-
-    if not mic_ok_bool:
-        notes["warnings"].append("Microphone stream was not captured (permission missing or blocked).")
-
-    if tab_level_f < 0.01 and mic_level_f < 0.01:
-        notes["warnings"].append("Audio levels were very low (recording likely silent).")
-
-    if not transcript_text.strip():
-        notes["warnings"].append("Transcript was empty. Usually means silent recording or transcription not configured.")
 
     meeting = save_meeting_record(
         session_id=session_id,
@@ -211,3 +226,11 @@ async def meetings_upload(
 def meetings_latest(session_id: str | None = None):
     meeting = get_latest_meeting(session_id=session_id)
     return {"ok": True, "meeting": meeting}
+
+@app.get("/meetings/list")
+def meetings_list():
+    return {"ok": True, "items": list_meetings()}
+
+@app.get("/meetings/search")
+def meetings_search(query: str = Query(default="")):
+    return {"ok": True, "items": search_meetings(query)}

@@ -4191,6 +4191,69 @@
         ]
       },
       "created_at": "2026-03-11T18:13:53.874363+00:00"
+    },
+    {
+      "meeting_id": "meeting_03a42eb856c7454d81dd7c9b739ea829",
+      "session_id": "session_1773772810449_cfxdtm42",
+      "tab_id": "620605021",
+      "page_url": "https://meet.google.com/bzm-pyzv-cjd?authuser=0",
+      "page_title": "Meet - bzm-pyzv-cjd",
+      "file_name": "meeting_031ce3df33f3474d8344446567aa6b92.webm",
+      "relative_path": "data/meetings/meeting_031ce3df33f3474d8344446567aa6b92.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "",
+      "notes": {
+        "summary": "No transcript available.",
+        "decisions": [],
+        "action_items": [],
+        "follow_up_questions": [],
+        "warnings": [
+          "Transcript text was empty, so follow-up notes could not be generated.",
+          "Microphone stream was not captured (permission missing or blocked).",
+          "Audio levels were very low (recording likely silent).",
+          "Transcript was empty. Usually means silent recording or transcription not configured."
+        ]
+      },
+      "created_at": "2026-03-17T18:40:28.959550+00:00"
+    },
+    {
+      "meeting_id": "meeting_329bbb4af22a493dbd9bc2e9310e499d",
+      "session_id": "session_1773779380517_e0wkhit3",
+      "tab_id": "620605033",
+      "page_url": "https://meet.google.com/iev-isgp-xir?authuser=0",
+      "page_title": "Meet - iev-isgp-xir",
+      "file_name": "meeting_a41c27ae2fe748f5b6a7648e6ce2e81c.webm",
+      "relative_path": "data/meetings/meeting_a41c27ae2fe748f5b6a7648e6ce2e81c.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "How are they they speak about the future.",
+      "notes": {
+        "summary": "- Discussed the vision for future projects.\n- Emphasized the importance of collaboration.\n- Highlighted potential challenges ahead.\n- Reviewed current progress on ongoing initiatives.\n- Identified key stakeholders for future engagement.",
+        "decisions": [
+          "Focus on enhancing team collaboration.",
+          "Address potential challenges proactively."
+        ],
+        "action_items": [
+          {
+            "owner": "Unassigned",
+            "task": "Draft a collaboration strategy",
+            "due_date": ""
+          },
+          {
+            "owner": "Unassigned",
+            "task": "Identify key stakeholders",
+            "due_date": ""
+          }
+        ],
+        "follow_up_questions": [
+          "What specific challenges should we prepare for?",
+          "How can we improve our current initiatives?"
+        ],
+        "warnings": [
+          "Ensure all team members are aligned on the vision."
+        ],
+        "minutes_markdown": "# Meeting Minutes \u2013 Meet - iev-isgp-xir\n\n## Summary\n- Discussed the vision for future projects.\n- Emphasized the importance of collaboration.\n- Highlighted potential challenges ahead.\n- Reviewed current progress on ongoing initiatives.\n- Identified key stakeholders for future engagement.\n\n## Decisions (2)\n- Focus on enhancing team collaboration.\n- Address potential challenges proactively.\n\n## Action Items (2)\n- **Unassigned**: Draft a collaboration strategy\n- **Unassigned**: Identify key stakeholders\n\n## Follow-ups (2)\n- What specific challenges should we prepare for?\n- How can we improve our current initiatives?"
+      },
+      "created_at": "2026-03-17T20:30:50.309301+00:00"
     }
   ]
 }

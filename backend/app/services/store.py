@@ -6,7 +6,6 @@ WHAT THIS FILE DOES
 2. Saves sessions, documents, screenshots, and meetings
 3. Supports latest-item retrieval and basic search
 4. Persists screenshot image files and meeting audio files
-
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
@@ -39,13 +37,7 @@ def ensure_store_exists() -> None:
     if not STORE_PATH.exists():
         STORE_PATH.write_text(
             json.dumps(
-                {
-                    "sessions": {},
-                    "documents": [],
-                    "workflows": [],
-                    "screenshots": [],
-                    "meetings": [],
-                },
+                {"sessions": {}, "documents": [], "workflows": [], "screenshots": [], "meetings": []},
                 indent=2,
             ),
             encoding="utf-8",
@@ -72,12 +64,7 @@ def write_store(data: Dict[str, Any]) -> None:
     STORE_PATH.write_text(json.dumps(_normalize_store(data), indent=2), encoding="utf-8")
 
 
-def upsert_session(
-    session_id: str,
-    page: Dict[str, Any],
-    actions: List[Dict[str, Any]],
-    steps: List[str],
-) -> Dict[str, Any]:
+def upsert_session(session_id: str, page: Dict[str, Any], actions: List[Dict[str, Any]], steps: List[str]) -> Dict[str, Any]:
     data = read_store()
     sessions = data.get("sessions", {})
     existing = sessions.get(session_id)
@@ -108,16 +95,13 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     return data.get("sessions", {}).get(session_id)
 
 
+# ✅ REQUIRED by automation.py (your crash)
 def list_sessions() -> List[Dict[str, Any]]:
     data = read_store()
     return list(data.get("sessions", {}).values())
 
 
-def save_documents(
-    session_id: str,
-    documents: List[Dict[str, Any]],
-    audit: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+def save_documents(session_id: str, documents: List[Dict[str, Any]], audit: Dict[str, Any]) -> List[Dict[str, Any]]:
     data = read_store()
     existing_documents = data.get("documents", [])
     saved = []
@@ -138,13 +122,10 @@ def save_documents(
 def get_latest_document(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     data = read_store()
     documents = data.get("documents", [])
-
     if session_id:
-      documents = [doc for doc in documents if doc.get("session_id") == session_id]
-
+        documents = [doc for doc in documents if doc.get("session_id") == session_id]
     if not documents:
         return None
-
     documents = sorted(documents, key=lambda item: item.get("created_at", ""), reverse=True)
     return documents[0]
 
@@ -162,17 +143,11 @@ def search_documents(query: str) -> List[Dict[str, Any]]:
 
     for doc in documents:
         haystack = " ".join(
-            [
-                str(doc.get("title", "")),
-                str(doc.get("summary", "")),
-                str(doc.get("content", "")),
-            ]
+            [str(doc.get("title", "")), str(doc.get("summary", "")), str(doc.get("content", ""))]
         ).lower()
-
         score = 0
         for term in terms:
             score += haystack.count(term)
-
         if score > 0:
             scored.append((score, doc))
 
@@ -225,13 +200,10 @@ def save_screenshot(
 def get_latest_screenshot(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     data = read_store()
     screenshots = data.get("screenshots", [])
-
     if session_id:
         screenshots = [item for item in screenshots if item.get("session_id") == session_id]
-
     if not screenshots:
         return None
-
     screenshots = sorted(screenshots, key=lambda item: item.get("created_at", ""), reverse=True)
     return screenshots[0]
 
@@ -247,7 +219,6 @@ def save_meeting_record(
     transcript: str,
     notes: Dict[str, Any],
 ) -> Dict[str, Any]:
-    
     data = read_store()
     meetings = data.get("meetings", [])
 
@@ -268,26 +239,21 @@ def save_meeting_record(
     meetings.append(record)
     data["meetings"] = meetings
     write_store(data)
-
     return record
 
 
 def get_latest_meeting(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     data = read_store()
     meetings = data.get("meetings", [])
-
     if session_id:
         meetings = [item for item in meetings if item.get("session_id") == session_id]
-
     if not meetings:
         return None
-
     meetings = sorted(meetings, key=lambda item: item.get("created_at", ""), reverse=True)
     return meetings[0]
 
 
 def save_uploaded_meeting_file(file_name: str, content: bytes) -> Dict[str, str]:
-    
     ensure_store_exists()
     safe_id = uuid.uuid4().hex
     suffix = Path(file_name).suffix or ".webm"
@@ -303,9 +269,7 @@ def save_uploaded_meeting_file(file_name: str, content: bytes) -> Dict[str, str]
 
 
 def get_session_evidence_summary(session_id: str) -> Dict[str, Any]:
-    
     data = read_store()
-
     screenshots = [item for item in data.get("screenshots", []) if item.get("session_id") == session_id]
     meetings = [item for item in data.get("meetings", []) if item.get("session_id") == session_id]
 
@@ -322,3 +286,38 @@ def get_session_evidence_summary(session_id: str) -> Dict[str, Any]:
         "meeting_count": len(meetings),
         "latest_meeting_excerpt": excerpt,
     }
+
+
+# Added for Library support (Meetings tab)
+def list_meetings() -> List[Dict[str, Any]]:
+    data = read_store()
+    meetings = data.get("meetings", [])
+    return sorted(meetings, key=lambda m: m.get("created_at", ""), reverse=True)
+
+
+def search_meetings(query: str) -> List[Dict[str, Any]]:
+    data = read_store()
+    meetings = data.get("meetings", [])
+    q = (query or "").strip().lower()
+    if not q:
+        return sorted(meetings, key=lambda m: m.get("created_at", ""), reverse=True)[:50]
+
+    terms = [t for t in q.split() if t]
+    scored: List[tuple[int, Dict[str, Any]]] = []
+    for m in meetings:
+        notes = m.get("notes") or {}
+        hay = " ".join([
+            str(m.get("page_title", "")),
+            str(m.get("page_url", "")),
+            str(notes.get("summary", "")),
+            str(notes.get("minutes_markdown", "")),
+            str(m.get("transcript", "")),
+        ]).lower()
+        score = 0
+        for term in terms:
+            score += hay.count(term)
+        if score > 0:
+            scored.append((score, m))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [x[1] for x in scored[:50]]

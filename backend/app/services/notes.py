@@ -1,7 +1,3 @@
-"""
-Meeting notes generation service.
-"""
-
 from __future__ import annotations
 
 import json
@@ -12,189 +8,222 @@ from typing import Any, Dict, List
 import requests
 
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+SUPPORTED_STYLES = {"professional_bullets", "narrative", "action_items_only"}
 
 
-def get_openai_api_key() -> str:
+def _api_key() -> str:
     return os.getenv("OPENAI_API_KEY", "").strip()
 
 
-def build_meeting_notes(transcript: str, page_title: str = "") -> Dict[str, Any]:
+def build_meeting_notes(transcript: str, page_title: str = "", style: str = "professional_bullets") -> Dict[str, Any]:
+    style = (style or "professional_bullets").strip().lower()
+    if style not in SUPPORTED_STYLES:
+        style = "professional_bullets"
+
     if not transcript.strip():
-        return {
-            "summary": "No transcript available.",
+        notes = {
+            "summary": "- No transcript available.",
             "decisions": [],
             "action_items": [],
             "follow_up_questions": [],
-            "warnings": [
-                "Transcript text was empty, so follow-up notes could not be generated."
-            ],
+            "warnings": ["Transcript text was empty."],
         }
+        notes["minutes_markdown"] = render_minutes_markdown(notes, page_title)
+        return notes
 
-    if get_openai_api_key():
-        ai_result = _generate_notes_with_openai(transcript=transcript, page_title=page_title)
-        if ai_result.get("ok"):
-            return ai_result["notes"]
+    if _api_key():
+        ai = _notes_with_openai(transcript, page_title, style)
+        if ai.get("ok"):
+            notes = ai["notes"]
+            notes["minutes_markdown"] = render_minutes_markdown(notes, page_title)
+            return notes
 
-    heuristic = _generate_notes_heuristically(transcript=transcript, page_title=page_title)
-    heuristic.setdefault("warnings", [])
-    if get_openai_api_key():
-        heuristic["warnings"].append(
-            "OpenAI notes generation failed, so heuristic note extraction was used instead."
-        )
-    else:
-        heuristic["warnings"].append(
-            "OPENAI_API_KEY is not loaded on the backend, so heuristic note extraction was used."
-        )
-    return heuristic
+    notes = _notes_heuristic(transcript, page_title, style)
+    notes.setdefault("warnings", [])
+    notes["warnings"].append("Heuristic minutes used (AI missing or failed).")
+    notes["minutes_markdown"] = render_minutes_markdown(notes, page_title)
+    return notes
 
 
-def _generate_notes_with_openai(transcript: str, page_title: str = "") -> Dict[str, Any]:
-    openai_api_key = get_openai_api_key()
-    if not openai_api_key:
+def _notes_with_openai(transcript: str, page_title: str, style: str) -> Dict[str, Any]:
+    key = _api_key()
+    if not key:
         return {"ok": False, "error": "Missing OPENAI_API_KEY"}
 
-    system_prompt = """
-You are a meeting-notes assistant.
-Return ONLY valid JSON with this exact structure:
-{
+    if style == "professional_bullets":
+        summary_rule = "Summary MUST be 5–10 bullet points. Each line starts with '- '. No paragraphs."
+    elif style == "narrative":
+        summary_rule = "Summary MUST be a short professional paragraph (2–5 sentences)."
+    else:
+        summary_rule = "Summary MUST be exactly: '- Action items only (see list below).'"
+
+    system = f"""
+Return ONLY valid JSON with this structure:
+{{
   "summary": "string",
   "decisions": ["string"],
-  "action_items": [{"owner": "string", "task": "string", "due_date": "string"}],
+  "action_items": [{{"owner":"string","task":"string","due_date":"string"}}],
   "follow_up_questions": ["string"],
   "warnings": ["string"]
-}
+}}
+
 Rules:
-- Do not include markdown.
-- If an owner is unknown, use "Unassigned".
-- If a due date is unknown, use "".
-- Keep the summary concise but useful.
+- {summary_rule}
+- Decisions: short one-liners.
+- Action items: specific tasks. owner="Unassigned" if unknown. due_date="" if unknown.
+- No markdown headers.
 """.strip()
 
-    user_prompt = f"""
-Page title / meeting context:
-{page_title or "Unknown"}
-
-Transcript:
-{transcript}
-""".strip()
+    user = f"Title/context: {page_title or 'Unknown'}\n\nTranscript:\n{transcript}".strip()
 
     try:
-        response = requests.post(
+        r = requests.post(
             OPENAI_CHAT_COMPLETIONS_URL,
-            headers={
-                "Authorization": f"Bearer {openai_api_key}",
-                "Content-Type": "application/json",
-            },
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
             json={
                 "model": "gpt-4o-mini",
                 "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
                 "temperature": 0.2,
             },
             timeout=120,
         )
+        if not r.ok:
+            return {"ok": False, "error": r.text[:300]}
 
-        if not response.ok:
-            return {"ok": False, "error": response.text[:500]}
-
-        payload = response.json()
-        content = payload["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
-
-        return {
-            "ok": True,
-            "notes": {
-                "summary": str(parsed.get("summary", "")).strip(),
-                "decisions": _clean_str_list(parsed.get("decisions", [])),
-                "action_items": _clean_action_items(parsed.get("action_items", [])),
-                "follow_up_questions": _clean_str_list(parsed.get("follow_up_questions", [])),
-                "warnings": _clean_str_list(parsed.get("warnings", [])),
-            },
+        parsed = json.loads(r.json()["choices"][0]["message"]["content"])
+        notes = {
+            "summary": str(parsed.get("summary", "")).strip(),
+            "decisions": _clean_str_list(parsed.get("decisions", [])),
+            "action_items": _clean_action_items(parsed.get("action_items", [])),
+            "follow_up_questions": _clean_str_list(parsed.get("follow_up_questions", [])),
+            "warnings": _clean_str_list(parsed.get("warnings", [])),
         }
 
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        if style == "professional_bullets":
+            notes["summary"] = ensure_bullets(notes["summary"])
+        if style == "action_items_only":
+            notes["summary"] = "- Action items only (see list below)."
+
+        return {"ok": True, "notes": notes}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
-def _generate_notes_heuristically(transcript: str, page_title: str = "") -> Dict[str, Any]:
+def _notes_heuristic(transcript: str, page_title: str, style: str) -> Dict[str, Any]:
     sentences = _split_sentences(transcript)
-    summary = " ".join(sentences[:5]).strip()
-    if not summary:
-        summary = f"Meeting captured for {page_title or 'the current tab'}, but no usable summary was extracted."
 
-    decisions = []
-    action_items = []
-    follow_up_questions = []
+    if style == "narrative":
+        summary = " ".join(sentences[:5]).strip() or f"Meeting captured for {page_title or 'the tab'}."
+    elif style == "action_items_only":
+        summary = "- Action items only (see list below)."
+    else:
+        summary = "\n".join([f"- {s}" for s in sentences[:10]]) or "- Meeting captured."
+        summary = ensure_bullets(summary)
 
-    decision_markers = ["decided", "agreed", "approved", "resolved", "we will", "we'll"]
-    action_markers = ["action item", "todo", "to do", "next step", "follow up", "i will", "i'll", "we need to", "please send", "please share", "schedule"]
-
-    for sentence in sentences:
-        lowered = sentence.lower()
-        if any(marker in lowered for marker in decision_markers):
-            decisions.append(sentence)
-        if any(marker in lowered for marker in action_markers):
-            action_items.append({"owner": "Unassigned", "task": sentence, "due_date": ""})
-        if "?" in sentence:
-            follow_up_questions.append(sentence)
+    decisions, followups, action_items = [], [], []
+    for s in sentences:
+        low = s.lower()
+        if any(x in low for x in ["decided", "agreed", "approved", "resolved"]):
+            decisions.append(s)
+        if any(x in low for x in ["action item", "todo", "next step", "follow up", "we need to"]):
+            action_items.append({"owner": "Unassigned", "task": s, "due_date": ""})
+        if "?" in s:
+            followups.append(s)
 
     return {
         "summary": summary,
-        "decisions": _dedupe_preserve_order(decisions)[:10],
-        "action_items": _dedupe_action_items(action_items)[:10],
-        "follow_up_questions": _dedupe_preserve_order(follow_up_questions)[:10],
+        "decisions": _dedupe(decisions)[:10],
+        "action_items": _dedupe_action_items(action_items)[:15],
+        "follow_up_questions": _dedupe(followups)[:10],
         "warnings": [],
     }
 
 
+def render_minutes_markdown(notes: Dict[str, Any], page_title: str) -> str:
+    title = page_title.strip() if page_title else "Meeting"
+    summary = str(notes.get("summary", "") or "").strip()
+    decisions = notes.get("decisions", []) or []
+    actions = notes.get("action_items", []) or []
+    followups = notes.get("follow_up_questions", []) or []
+
+    lines: List[str] = []
+    lines.append(f"# Meeting Minutes – {title}")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append(summary if summary else "- (no summary)")
+    lines.append("")
+    lines.append(f"## Decisions ({len(decisions)})")
+    lines.extend([f"- {d}" for d in decisions] or ["- None captured."])
+    lines.append("")
+    lines.append(f"## Action Items ({len(actions)})")
+    if actions:
+        for a in actions:
+            owner = (a.get("owner") or "Unassigned").strip()
+            task = (a.get("task") or "").strip()
+            due = (a.get("due_date") or "").strip()
+            due_str = f" (Due: {due})" if due else ""
+            lines.append(f"- **{owner}**: {task}{due_str}")
+    else:
+        lines.append("- None captured.")
+    lines.append("")
+    lines.append(f"## Follow-ups ({len(followups)})")
+    lines.extend([f"- {q}" for q in followups] or ["- None captured."])
+    return "\n".join(lines).strip()
+
+
+def ensure_bullets(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return "- (no summary)"
+    if t.startswith("- "):
+        return t
+    parts = _split_sentences(t)
+    bullets = [f"- {p}" for p in parts[:10] if p.strip()]
+    return "\n".join(bullets) if bullets else "- (no summary)"
+
+
 def _split_sentences(text: str) -> List[str]:
     parts = re.split(r"(?<=[.!?])\s+|\n+", text.strip())
-    return [part.strip() for part in parts if part.strip()]
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _clean_str_list(values: Any) -> List[str]:
-    if not isinstance(values, list):
-        return []
-    return [str(item).strip() for item in values if str(item).strip()]
+    return [str(v).strip() for v in values] if isinstance(values, list) else []
 
 
 def _clean_action_items(values: Any) -> List[Dict[str, str]]:
     if not isinstance(values, list):
         return []
-    cleaned: List[Dict[str, str]] = []
-    for item in values:
-        if not isinstance(item, dict):
+    out = []
+    for v in values:
+        if not isinstance(v, dict):
             continue
-        cleaned.append({
-            "owner": str(item.get("owner", "Unassigned") or "Unassigned").strip(),
-            "task": str(item.get("task", "")).strip(),
-            "due_date": str(item.get("due_date", "")).strip(),
+        out.append({
+            "owner": str(v.get("owner", "Unassigned") or "Unassigned").strip(),
+            "task": str(v.get("task", "")).strip(),
+            "due_date": str(v.get("due_date", "")).strip(),
         })
-    return [item for item in cleaned if item["task"]]
+    return [x for x in out if x["task"]]
 
 
-def _dedupe_preserve_order(values: List[str]) -> List[str]:
-    seen = set()
-    result = []
-    for value in values:
-        key = value.strip().lower()
-        if not key or key in seen:
+def _dedupe(items: List[str]) -> List[str]:
+    seen, out = set(), []
+    for x in items:
+        k = x.strip().lower()
+        if not k or k in seen:
             continue
-        seen.add(key)
-        result.append(value)
-    return result
+        seen.add(k)
+        out.append(x)
+    return out
 
 
-def _dedupe_action_items(values: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    seen = set()
-    result = []
-    for value in values:
-        key = (value.get("owner", "").strip().lower(), value.get("task", "").strip().lower())
-        if not key[1] or key in seen:
+def _dedupe_action_items(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    seen, out = set(), []
+    for it in items:
+        k = (it.get("owner", "").strip().lower(), it.get("task", "").strip().lower())
+        if not k[1] or k in seen:
             continue
-        seen.add(key)
-        result.append(value)
-    return result
+        seen.add(k)
+        out.append(it)
+    return out

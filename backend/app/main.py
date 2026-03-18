@@ -10,7 +10,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import AuditRequest, AutomationRequest, GenerateRequest, IngestRequest
+from app.models import AuditRequest, AutomationRequest, DocumentUpdateRequest, GenerateRequest, IngestRequest
 from app.services.audit import run_audit
 from app.services.automation import suggest_automation
 from app.services.docs import actions_to_steps, dedupe_actions, generate_document_options
@@ -32,6 +32,7 @@ from app.services.store import (
     search_meetings,
     get_document_item,
     get_meeting_item,
+    update_document_item,
 )
 
 app = FastAPI(title="Continuum API", version="1.3.0")
@@ -131,6 +132,20 @@ def docs_search(query: str = Query(default="")):
 @app.get("/docs/item")
 def docs_item(created_at: str | None = None, session_id: str | None = None, title: str | None = None):
     item = get_document_item(created_at=created_at, session_id=session_id, title=title)
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return {"ok": True, "item": item}
+
+@app.post("/docs/update")
+def docs_update(payload: DocumentUpdateRequest):
+    item = update_document_item(
+        created_at=payload.created_at,
+        session_id=payload.session_id,
+        original_title=payload.original_title,
+        title=payload.title,
+        summary=payload.summary,
+        content=payload.content,
+    )
     if not item:
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"ok": True, "item": item}

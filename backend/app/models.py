@@ -50,3 +50,11 @@ class AuditRequest(BaseModel):
 
 class AutomationRequest(BaseModel):
     session_id: str
+
+class DocumentUpdateRequest(BaseModel):
+    created_at: str
+    session_id: Optional[str] = None
+    original_title: Optional[str] = None
+    title: str
+    summary: str = ""
+    content: str = ""

@@ -144,6 +144,38 @@ def get_document_item(created_at: Optional[str] = None, session_id: Optional[str
 
     return None
 
+def update_document_item(
+    created_at: str,
+    session_id: Optional[str] = None,
+    original_title: Optional[str] = None,
+    title: str = "",
+    summary: str = "",
+    content: str = "",
+) -> Optional[Dict[str, Any]]:
+    data = read_store()
+    documents = data.get("documents", [])
+
+    for idx, doc in enumerate(documents):
+        if created_at and doc.get("created_at") != created_at:
+            continue
+        if session_id and doc.get("session_id") != session_id:
+            continue
+        if original_title and doc.get("title") != original_title:
+            continue
+
+        updated = deepcopy(doc)
+        updated["title"] = title.strip() or doc.get("title", "Untitled Document")
+        updated["summary"] = summary.strip()
+        updated["content"] = content
+        updated["updated_at"] = _now_iso()
+
+        documents[idx] = updated
+        data["documents"] = documents
+        write_store(data)
+        return updated
+
+    return None
+
 def search_documents(query: str) -> List[Dict[str, Any]]:
     data = read_store()
     documents = data.get("documents", [])

@@ -4254,6 +4254,128 @@
         "minutes_markdown": "# Meeting Minutes \u2013 Meet - iev-isgp-xir\n\n## Summary\n- Discussed the vision for future projects.\n- Emphasized the importance of collaboration.\n- Highlighted potential challenges ahead.\n- Reviewed current progress on ongoing initiatives.\n- Identified key stakeholders for future engagement.\n\n## Decisions (2)\n- Focus on enhancing team collaboration.\n- Address potential challenges proactively.\n\n## Action Items (2)\n- **Unassigned**: Draft a collaboration strategy\n- **Unassigned**: Identify key stakeholders\n\n## Follow-ups (2)\n- What specific challenges should we prepare for?\n- How can we improve our current initiatives?"
       },
       "created_at": "2026-03-17T20:30:50.309301+00:00"
+    },
+    {
+      "meeting_id": "meeting_a6b99678ad1441cd968d48b938121cb9",
+      "session_id": "session_1773781702316_gki0sfg4",
+      "tab_id": "620605033",
+      "page_url": "https://meet.google.com/jts-frbn-wvz?authuser=0",
+      "page_title": "Meet - jts-frbn-wvz",
+      "file_name": "meeting_3d6581685bf8456ea64609269e68c9a5.webm",
+      "relative_path": "data/meetings/meeting_3d6581685bf8456ea64609269e68c9a5.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "Today we're going to talk about use cases for Firebase, talk about installing the API key, making sure that we're following company guidelines. And finally, we want to talk about appropriate dressing in the workplace. We wanna make sure that everyone's dressed professionally in their respective way.",
+      "notes": {
+        "summary": "- Discussed various use cases for Firebase.\n- Reviewed the process for installing the API key.\n- Emphasized the importance of following company guidelines.\n- Addressed the topic of appropriate workplace attire.\n- Stressed the need for professionalism in dressing.",
+        "decisions": [
+          "Focus on Firebase use cases moving forward.",
+          "Ensure API key installation follows company protocols.",
+          "Implement a dress code policy for professionalism."
+        ],
+        "action_items": [
+          {
+            "owner": "Unassigned",
+            "task": "Compile a list of Firebase use cases",
+            "due_date": ""
+          },
+          {
+            "owner": "Unassigned",
+            "task": "Create a guide for API key installation",
+            "due_date": ""
+          },
+          {
+            "owner": "Unassigned",
+            "task": "Draft a dress code policy",
+            "due_date": ""
+          }
+        ],
+        "follow_up_questions": [
+          "What specific Firebase use cases should we prioritize?",
+          "Who will be responsible for overseeing the dress code implementation?"
+        ],
+        "warnings": [],
+        "minutes_markdown": "# Meeting Minutes \u2013 Meet - jts-frbn-wvz\n\n## Summary\n- Discussed various use cases for Firebase.\n- Reviewed the process for installing the API key.\n- Emphasized the importance of following company guidelines.\n- Addressed the topic of appropriate workplace attire.\n- Stressed the need for professionalism in dressing.\n\n## Decisions (3)\n- Focus on Firebase use cases moving forward.\n- Ensure API key installation follows company protocols.\n- Implement a dress code policy for professionalism.\n\n## Action Items (3)\n- **Unassigned**: Compile a list of Firebase use cases\n- **Unassigned**: Create a guide for API key installation\n- **Unassigned**: Draft a dress code policy\n\n## Follow-ups (2)\n- What specific Firebase use cases should we prioritize?\n- Who will be responsible for overseeing the dress code implementation?"
+      },
+      "created_at": "2026-03-17T21:09:00.584773+00:00"
+    },
+    {
+      "meeting_id": "meeting_d743be84c0b743d3a5576fd263d41a2a",
+      "session_id": "session_1773783294741_kg9soaz5",
+      "tab_id": "620605033",
+      "page_url": "https://meet.google.com/arq-crcr-xsm?authuser=0",
+      "page_title": "Meet - arq-crcr-xsm",
+      "file_name": "meeting_d9db76227fd24bdc9c913650d9f33132.webm",
+      "relative_path": "data/meetings/meeting_d9db76227fd24bdc9c913650d9f33132.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "How are we receiving the students, coffee or the",
+      "notes": {
+        "summary": "- ['- Discussed the process of receiving students.', '- Considered offering coffee to students upon arrival.', '- Evaluated the need for additional refreshments.', '- Reviewed the schedule for student arrivals.', '- Assigned roles for welcoming students.']",
+        "decisions": [
+          "Provide coffee for students upon arrival.",
+          "Assign specific roles for the welcoming committee."
+        ],
+        "action_items": [
+          {
+            "owner": "Unassigned",
+            "task": "Organize coffee and refreshments for student arrivals",
+            "due_date": ""
+          },
+          {
+            "owner": "Unassigned",
+            "task": "Create a schedule for student arrivals",
+            "due_date": ""
+          },
+          {
+            "owner": "Unassigned",
+            "task": "Assign roles to team members for welcoming students",
+            "due_date": ""
+          }
+        ],
+        "follow_up_questions": [
+          "What other refreshments should we consider?",
+          "How many students are we expecting?",
+          "Who will be responsible for setting up the welcome area?"
+        ],
+        "warnings": [
+          "Ensure we have enough coffee for all students.",
+          "Be mindful of dietary restrictions when selecting refreshments."
+        ],
+        "minutes_markdown": "# Meeting Minutes \u2013 Meet - arq-crcr-xsm\n\n## Summary\n- ['- Discussed the process of receiving students.', '- Considered offering coffee to students upon arrival.', '- Evaluated the need for additional refreshments.', '- Reviewed the schedule for student arrivals.', '- Assigned roles for welcoming students.']\n\n## Decisions (2)\n- Provide coffee for students upon arrival.\n- Assign specific roles for the welcoming committee.\n\n## Action Items (3)\n- **Unassigned**: Organize coffee and refreshments for student arrivals\n- **Unassigned**: Create a schedule for student arrivals\n- **Unassigned**: Assign roles to team members for welcoming students\n\n## Follow-ups (3)\n- What other refreshments should we consider?\n- How many students are we expecting?\n- Who will be responsible for setting up the welcome area?"
+      },
+      "created_at": "2026-03-17T21:36:53.060620+00:00"
+    },
+    {
+      "meeting_id": "meeting_3e1988a104154fa68299d6393336783d",
+      "session_id": "session_1773783294741_kg9soaz5",
+      "tab_id": "620605033",
+      "page_url": "https://meet.google.com/arq-crcr-xsm?authuser=0",
+      "page_title": "Meet - arq-crcr-xsm",
+      "file_name": "meeting_e9d713e0b3ff466eb4701566371a5106.webm",
+      "relative_path": "data/meetings/meeting_e9d713e0b3ff466eb4701566371a5106.webm",
+      "mime_type": "audio/webm;codecs=opus",
+      "transcript": "Hello, how is everyone today? Yeah, so we've been thinking about the last year and I just wanted to talk about what is it and I don't know, we really have to make sure if it's character and competition find us right and we do a test match especially.",
+      "notes": {
+        "summary": "- Discussed reflections on the past year. - Emphasized the importance of character in competition. - Suggested conducting a test match. - Highlighted the need for clarity in objectives. - Encouraged team collaboration for better outcomes.",
+        "decisions": [
+          "Conduct a test match to evaluate performance."
+        ],
+        "action_items": [
+          {
+            "owner": "Unassigned",
+            "task": "Plan and schedule a test match.",
+            "due_date": ""
+          }
+        ],
+        "follow_up_questions": [
+          "What specific objectives should we focus on during the test match?",
+          "How can we better define our character in competition?"
+        ],
+        "warnings": [
+          "Ensure all team members are aligned on the goals for the test match."
+        ],
+        "minutes_markdown": "# Meeting Minutes \u2013 Meet - arq-crcr-xsm\n\n## Summary\n- Discussed reflections on the past year. - Emphasized the importance of character in competition. - Suggested conducting a test match. - Highlighted the need for clarity in objectives. - Encouraged team collaboration for better outcomes.\n\n## Decisions (1)\n- Conduct a test match to evaluate performance.\n\n## Action Items (1)\n- **Unassigned**: Plan and schedule a test match.\n\n## Follow-ups (2)\n- What specific objectives should we focus on during the test match?\n- How can we better define our character in competition?"
+      },
+      "created_at": "2026-03-17T21:46:25.689180+00:00"
     }
   ]
 }

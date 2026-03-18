@@ -13,22 +13,28 @@
       </header>
 
       <section class="card">
-        <input id="q" placeholder="Search docs..." />
+        <div class="tabs">
+          <button id="tabDocs" class="tab active">Docs</button>
+          <button id="tabMeetings" class="tab">Meetings</button>
+        </div>
+
+        <input id="q" placeholder="Search..." />
         <button id="searchBtn">Search</button>
         <button id="refreshBtn" class="ghost">Recent</button>
       </section>
 
       <section class="card">
-        <h2>Documents</h2>
+        <h2 id="listTitle">Documents</h2>
         <div id="list" class="list">Loading...</div>
       </section>
 
       <section class="card">
         <h2>Preview</h2>
-        <div id="preview" class="list subtle">Select a document.</div>
+        <div id="preview" class="list subtle">Select an item.</div>
       </section>
     </div>
 
+    <script type="module" src="react-dist/preview.js"></script>
     <script src="dashboard.js"></script>
   </body>
 </html>

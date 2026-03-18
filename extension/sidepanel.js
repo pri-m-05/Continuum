@@ -1,5 +1,6 @@
 let activeSessionId = null;
 let meetingPollHandle = null;
+let lastSeenMeetingCompletedAt = 0;
 
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("libraryBtn").addEventListener("click", () => sendMessage({ type: "OPEN_LIBRARY" }));
@@ -8,19 +9,26 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("generateBtn").addEventListener("click", generateDocs);
   document.getElementById("captureRecommendedBtn").addEventListener("click", () => captureScreenshot({ recommended: true }));
   document.getElementById("captureAnyBtn").addEventListener("click", () => captureScreenshot({ recommended: false }));
+
   document.getElementById("startMeetingBtn").addEventListener("click", startMeetingCapture);
   document.getElementById("stopMeetingBtn").addEventListener("click", stopMeetingCapture);
   document.getElementById("refreshMeetingBtn").addEventListener("click", async () => {
     await refreshMeetingStatus();
+    await refreshMicStatus();
     await loadLatestMeeting();
   });
+
+  document.getElementById("enableMicBtn").addEventListener("click", enableMicPermission);
 
   await pingBackend();
   await loadCurrentSession();
   await loadIntent();
   await refreshGuidance();
+
   await refreshMeetingStatus();
+  await refreshMicStatus();
   await loadLatestMeeting();
+
   startMeetingPolling();
 });
 
@@ -97,7 +105,7 @@ async function saveIntent() {
   }
 
   await sendMessage({ type: "SET_CAPTURE_INTENT", payload: { sessionId: activeSessionId, intent } });
-  status.textContent = `Intent saved. Primary output will use doc type: ${intent.doc_type}.`;
+  status.textContent = `Intent saved.`;
   await refreshGuidance();
 }
 
@@ -132,6 +140,7 @@ async function refreshGuidance() {
 
   const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId: activeSessionId } });
   const screenshotCount = evidence.summary?.screenshot_count || 0;
+
   const plan = buildScreenshotPlan(intent.doc_type);
   const nextIndex = Math.min(screenshotCount, plan.length - 1);
 
@@ -149,19 +158,6 @@ function buildScreenshotPlan(docType) {
       { title: "Key inputs filled", why: "Shows what was entered before submission." },
       { title: "Approval / control screen", why: "Shows control points (approvals/checks)." },
       { title: "Confirmation/result", why: "Proof of completion (ID, banner, status)." }
-    ];
-  }
-  if (docType === "meeting") {
-    return [
-      { title: "Meeting context screen", why: "Shows meeting title/date/context." },
-      { title: "Key decision slide/page", why: "Supports decisions and action items." }
-    ];
-  }
-  if (docType === "training") {
-    return [
-      { title: "Starting point", why: "Orient the learner to where they begin." },
-      { title: "Important fields", why: "Show what new users are expected to enter." },
-      { title: "Expected result", why: "Demonstrate what success looks like." }
     ];
   }
   return [
@@ -202,6 +198,7 @@ async function captureScreenshot({ recommended }) {
       type: "CAPTURE_SCREENSHOT",
       payload: { sessionId: activeSessionId, caption, recommended: !!recommended, step_index: screenshotCount }
     });
+
     status.textContent = `Saved: ${caption}`;
     if (res.screenshot?.data_url) {
       imgBox.innerHTML = `<img src="${res.screenshot.data_url}" alt="Screenshot" />`;
@@ -212,56 +209,58 @@ async function captureScreenshot({ recommended }) {
   }
 }
 
+async function enableMicPermission() {
+  const micStatus = document.getElementById("micStatus");
+  try {
+    micStatus.textContent = "Mic permission: opening permission tab...";
+    const url = chrome.runtime.getURL("mic.html");
+    await chrome.tabs.create({ url });
+    setTimeout(refreshMicStatus, 800);
+  } catch (e) {
+    micStatus.textContent = `Mic permission: error (${e.message})`;
+  }
+}
+
+async function refreshMicStatus() {
+  const micStatus = document.getElementById("micStatus");
+  const primed = await new Promise((resolve) => {
+    chrome.storage.local.get("continuum_mic_primed", (res) => resolve(!!res.continuum_mic_primed));
+  });
+  micStatus.textContent = primed ? "Mic permission: granted ✅" : "Mic permission: not granted";
+}
+
 async function startMeetingCapture() {
   const box = document.getElementById("latestMeeting");
   box.innerHTML = `<div class="subtle">Starting meeting capture...</div>`;
 
   try {
-    const res = await sendMessage({ type: "START_MEETING_CAPTURE" });
-
-    if (res.sessionId) {
-      activeSessionId = res.sessionId;
-      document.getElementById("sessionInfo").innerHTML =
-        `<div><strong>Session:</strong> ${escapeHtml(activeSessionId)}</div>`;
-    }
-
+    // MIC ALWAYS included
+    await sendMessage({ type: "START_MEETING_CAPTURE", payload: { includeMic: true } });
     await refreshMeetingStatus();
-    box.innerHTML =
-      `<div class="item"><strong>Recording started.</strong><div class="subtle">Keep the meeting tab active and click Stop when finished.</div></div>`;
+    startMeetingPolling();
   } catch (e) {
     box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
-    await refreshMeetingStatus();
   }
 }
 
 async function stopMeetingCapture() {
   const box = document.getElementById("latestMeeting");
-  box.innerHTML =
-    `<div class="subtle">Stopping meeting capture and waiting for upload/transcript...</div>`;
+  box.innerHTML = `<div class="subtle">Stopping... waiting for upload/transcript...</div>`;
 
   try {
     await sendMessage({ type: "STOP_MEETING_CAPTURE" });
     await refreshMeetingStatus();
-
-    setTimeout(async () => {
-      await refreshMeetingStatus();
-      await loadLatestMeeting();
-    }, 3000);
+    startMeetingPolling();
   } catch (e) {
     box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
-    await refreshMeetingStatus();
   }
 }
 
 async function refreshMeetingStatus() {
   try {
     const res = await sendMessage({ type: "GET_MEETING_STATUS" });
-
     let text = `Status: ${res.status || "idle"}`;
-    if (res.lastError) {
-      text += ` • ${res.lastError}`;
-    }
-
+    if (res.lastError) text += ` • ${res.lastError}`;
     document.getElementById("meetingStatus").textContent = text;
     return res;
   } catch (e) {
@@ -270,61 +269,138 @@ async function refreshMeetingStatus() {
   }
 }
 
+function startMeetingPolling() {
+  if (meetingPollHandle) clearInterval(meetingPollHandle);
+
+  meetingPollHandle = setInterval(async () => {
+    const st = await refreshMeetingStatus();
+
+    const completedAt = st.lastCompletedAt || 0;
+    if (st.status === "idle" && completedAt && completedAt !== lastSeenMeetingCompletedAt) {
+      lastSeenMeetingCompletedAt = completedAt;
+      await loadLatestMeeting();
+      clearInterval(meetingPollHandle);
+      meetingPollHandle = null;
+      return;
+    }
+
+    if (st.status === "error") {
+      await loadLatestMeeting();
+      clearInterval(meetingPollHandle);
+      meetingPollHandle = null;
+      return;
+    }
+  }, 1500);
+}
+
 async function loadLatestMeeting() {
   const box = document.getElementById("latestMeeting");
-  if (!activeSessionId) {
-    box.innerHTML = `<div class="subtle">No session yet.</div>`;
-    return;
-  }
+
+  let sessionForMeeting = activeSessionId || "";
+  try {
+    const st = await sendMessage({ type: "GET_MEETING_STATUS" });
+    if (st.sessionId) sessionForMeeting = st.sessionId;
+  } catch (_) {}
 
   try {
-    const res = await sendMessage({ type: "GET_LATEST_MEETING", payload: { sessionId: activeSessionId } });
+    const res = await sendMessage({ type: "GET_LATEST_MEETING", payload: { sessionId: sessionForMeeting } });
     const meeting = res.meeting;
+
     if (!meeting) {
       box.innerHTML = `<div class="subtle">No meeting captured yet.</div>`;
       return;
     }
+
     const notes = meeting.notes || {};
+    const minutes = cleanMinutesMarkdown(notes.minutes_markdown || notes.summary || "No minutes.");
+    const transcript = String(meeting.transcript || "").trim();
     const warnings = Array.isArray(notes.warnings) ? notes.warnings : [];
+
     box.innerHTML = `
-      <div class="item">
-        <strong>${escapeHtml(meeting.page_title || "Meeting")}</strong>
-        <div class="subtle">${escapeHtml(meeting.created_at || "")}</div>
-        <pre>${escapeHtml(notes.summary || "No summary.")}</pre>
-        ${warnings.length ? `<div class="subtle">Warnings: ${escapeHtml(warnings.join(" | "))}</div>` : ""}
+      <div class="item meeting-view">
+        <div class="meeting-meta">
+          <strong>${escapeHtml(meeting.page_title || "Meeting")}</strong>
+          <div class="subtle">${escapeHtml(meeting.created_at || "")}</div>
+        </div>
+
+        <section>
+          <div class="meeting-section-title">Minutes</div>
+          <div id="preview" class="meeting-surface"></div>
+        </section>
+
+        <section>
+          <div class="meeting-section-title">Transcript</div>
+          <div class="meeting-surface transcript-box">${escapeHtml(transcript || "No transcript yet.")}</div>
+        </section>
+
+        ${warnings.length ? `<div class="meeting-warnings"><strong>Warnings:</strong> ${escapeHtml(warnings.join(" | "))}</div>` : ""}
       </div>
     `;
+    const openLatestMeetingLink = document.getElementById("openLatestMeetingLink");
+    if (openLatestMeetingLink) {
+    openLatestMeetingLink.addEventListener("click", async (e) => {
+        e.preventDefault();
+        await openItemInLibrary({
+        mode: "meetings",
+        meetingId: meeting.meeting_id || "",
+        sessionId: meeting.session_id || "",
+        createdAt: meeting.created_at || "",
+        title: meeting.page_title || ""
+        });
+    });
+    }
+
+    if (typeof window.renderMarkdownPreview === "function") {
+      window.renderMarkdownPreview(minutes);
+    } else {
+      document.getElementById("preview").innerHTML = `<pre>${escapeHtml(minutes)}</pre>`;
+    }
   } catch (e) {
     box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
   }
 }
 
-function startMeetingPolling() {
-  if (meetingPollHandle) clearInterval(meetingPollHandle);
-  meetingPollHandle = setInterval(async () => {
-    const status = await refreshMeetingStatus();
-    if (status.status === "idle" || status.status === "error") {
-      await loadLatestMeeting();
-      clearInterval(meetingPollHandle);
-      meetingPollHandle = null;
-    }
-  }, 2000);
+function cleanMinutesMarkdown(value) {
+  let text = String(value || "").trim();
+
+  text = text.replace(/^#\s+Meeting Minutes[^\n]*\n+/i, "");
+  text = text.replace(/\.\s+-\s+/g, ".\n- ");
+  text = text.replace(/:\s+-\s+/g, ":\n- ");
+
+  return text;
 }
 
 function renderDraft(result) {
   const box = document.getElementById("latestDraft");
   const primary = result.primary_document;
+
   if (!primary) {
     box.textContent = "No draft yet.";
     return;
   }
+
   box.innerHTML = `
     <div class="item">
-      <strong>${escapeHtml(primary.title || "Draft")}</strong>
+      <div>
+        <a href="#" id="openLatestDocLink"><strong>${escapeHtml(primary.title || "Draft")}</strong></a>
+      </div>
       <div class="subtle">${escapeHtml(primary.summary || "")}</div>
       <pre>${escapeHtml(primary.content || "")}</pre>
     </div>
   `;
+
+  const openLatestDocLink = document.getElementById("openLatestDocLink");
+  if (openLatestDocLink) {
+    openLatestDocLink.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await openItemInLibrary({
+        mode: "docs",
+        sessionId: primary.session_id || activeSessionId || "",
+        createdAt: primary.created_at || "",
+        title: primary.title || ""
+      });
+    });
+  }
 }
 
 function getActiveTabId() {
@@ -334,6 +410,10 @@ function getActiveTabId() {
       resolve(tabs[0].id);
     });
   });
+}
+
+function openItemInLibrary(payload) {
+  return sendMessage({ type: "OPEN_LIBRARY", payload });
 }
 
 function sendMessage(message) {

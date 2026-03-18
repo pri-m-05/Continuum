@@ -85,11 +85,18 @@
       <section class="card">
         <h2>Meeting</h2>
         <div id="meetingStatus" class="subtle">Status: unknown</div>
+
+        <div class="row">
+          <button id="enableMicBtn" class="ghost">Enable microphone</button>
+        </div>
+        <div id="micStatus" class="subtle">Mic permission: unknown</div>
+
         <div class="row">
           <button id="startMeetingBtn">Start</button>
           <button id="stopMeetingBtn">Stop</button>
           <button id="refreshMeetingBtn" class="ghost">Refresh</button>
         </div>
+
         <div id="latestMeeting" class="list"></div>
       </section>
 
@@ -98,7 +105,7 @@
         <div id="latestDraft" class="list">No draft yet.</div>
       </section>
     </div>
-
+    <script type="module" src="react-dist/preview.js"></script>
     <script src="sidepanel.js"></script>
   </body>
 </html>

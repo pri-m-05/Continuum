@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum - Microphone Permission</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; max-width: 560px; }
+      button { padding: 10px 12px; border-radius: 10px; border: none; background: #111; color: #fff; cursor: pointer; }
+      .subtle { color: #555; font-size: 12px; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Enable Microphone for Continuum</h2>
+      <p>This is required to capture <b>your voice</b> during meetings (Google Meet often does not output your own voice into tab audio).</p>
+      <button id="grantBtn">Grant microphone access</button>
+      <div id="status" class="subtle"></div>
+    </div>
+
+    <script src="mic.js"></script>
+  </body>
+</html>

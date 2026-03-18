@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum Detail</title>
+    <link rel="stylesheet" href="detail.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="page-header">
+        <div>
+          <div class="eyebrow" id="detailType">Loading...</div>
+          <h1 id="pageTitle">Loading item...</h1>
+          <div class="meta" id="pageMeta"></div>
+        </div>
+
+        <div class="header-actions">
+          <button id="editDocBtn" class="ghost hidden">Edit</button>
+          <button id="saveDocBtn" class="primary hidden">Save</button>
+          <button id="cancelEditBtn" class="ghost hidden">Cancel</button>
+          <button id="backToLibrary" class="ghost">Back to Library</button>
+        </div>
+      </header>
+
+      <main class="detail-card">
+        <section id="viewState">
+          <div id="summaryCard" class="summary-card hidden">
+            <div class="summary-label">Summary</div>
+            <div id="summaryText" class="summary-text"></div>
+          </div>
+
+          <div id="preview" class="detail-render subtle">Loading...</div>
+        </section>
+
+        <section id="editState" class="editor-grid hidden">
+          <div class="editor-pane">
+            <label class="field-label" for="docTitleInput">Title</label>
+            <input id="docTitleInput" class="text-input" type="text" />
+
+            <label class="field-label" for="docSummaryInput">Summary</label>
+            <textarea id="docSummaryInput" class="text-area summary-input"></textarea>
+
+            <label class="field-label" for="docBodyInput">Body</label>
+            <textarea id="docBodyInput" class="text-area body-input"></textarea>
+
+            <div id="saveStatus" class="save-status subtle"></div>
+          </div>
+
+          <div class="preview-pane">
+            <div class="preview-shell">
+              <div id="editorPreviewTitle" class="preview-doc-title">Untitled Document</div>
+              <div id="editorPreviewSummaryWrap" class="preview-summary-wrap hidden">
+                <div class="summary-label">Summary</div>
+                <div id="editorPreviewSummary" class="preview-summary"></div>
+              </div>
+              <div id="editorPreview" class="detail-render"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="react-dist/preview.js"></script>
+    <script src="detail.js"></script>
+  </body>
+</html>

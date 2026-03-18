@@ -5,7 +5,8 @@ const DEFAULT_SETTINGS = {
     required_keywords: [],
     prohibited_words: []
   },
-  captureInputValues: false
+  captureInputValues: false,
+  meetingNotesStyle: "professional_bullets"
 };
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -13,17 +14,11 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (!existing.continuum_settings) {
     await storageSet("sync", { continuum_settings: DEFAULT_SETTINGS });
   }
-
-  await storageSet("local", {
-    continuum_offscreen_ready: false
-  });
+  await storageSet("local", { continuum_offscreen_ready: false });
 });
 
 chrome.runtime.onStartup?.addListener(async () => {
-  // Also reset on browser startup to avoid stale state.
-  await storageSet("local", {
-    continuum_offscreen_ready: false
-  });
+  await storageSet("local", { continuum_offscreen_ready: false });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -35,38 +30,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
+      if (message.type === "MIC_PERMISSION_PRIMED") {
+        await storageSet("local", { continuum_mic_primed: !!message.payload?.primed });
+        sendResponse({ ok: true });
+        return;
+      }
+
       switch (message.type) {
         case "OPEN_WORKSPACE": {
           const tab = await getActiveTab();
-          if (!tab || typeof tab.windowId !== "number") {
-            throw new Error("No active Chrome window was found.");
-          }
-
-          if (!chrome.sidePanel || !chrome.sidePanel.open) {
-            throw new Error("Side Panel API is not available in this Chrome build.");
-          }
-
-          await chrome.sidePanel.setOptions({
-            path: "sidepanel.html",
-            enabled: true
-          });
-
-          await chrome.sidePanel.open({
-            windowId: tab.windowId
-          });
-
+          if (!tab || typeof tab.windowId !== "number") throw new Error("No active Chrome window found.");
+          await chrome.sidePanel.setOptions({ path: "sidepanel.html", enabled: true });
+          await chrome.sidePanel.open({ windowId: tab.windowId });
           sendResponse({ ok: true });
           return;
         }
 
         case "OPEN_LIBRARY": {
-          await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
-          sendResponse({ ok: true });
-          return;
+            const payload = message.payload || {};
+            const params = new URLSearchParams();
+
+            if (payload.mode) params.set("mode", payload.mode);
+            if (payload.sessionId) params.set("session_id", payload.sessionId);
+            if (payload.createdAt) params.set("created_at", payload.createdAt);
+            if (payload.meetingId) params.set("meeting_id", payload.meetingId);
+            if (payload.title) params.set("title", payload.title);
+
+            const query = params.toString();
+            const url = chrome.runtime.getURL(`dashboard.html${query ? `?${query}` : ""}`);
+
+            await chrome.tabs.create({ url });
+            sendResponse({ ok: true });
+            return;
         }
 
         case "OPEN_OPTIONS_PAGE": {
           chrome.runtime.openOptionsPage();
+          sendResponse({ ok: true });
+          return;
+        }
+
+        case "OPEN_MIC_PERMISSION_PAGE": {
+          await chrome.tabs.create({ url: chrome.runtime.getURL("mic.html") });
           sendResponse({ ok: true });
           return;
         }
@@ -76,11 +81,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           try {
             const r = await fetchJson(`${s.backendBaseUrl}/health`, { method: "GET" });
             sendResponse(r);
-          } catch (error) {
-            sendResponse({
-              ok: false,
-              error: `Could not reach backend at ${s.backendBaseUrl}. Is uvicorn running?`
-            });
+          } catch {
+            sendResponse({ ok: false, error: `Could not reach backend at ${s.backendBaseUrl}. Is uvicorn running?` });
           }
           return;
         }
@@ -112,9 +114,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case "GET_EVIDENCE_SUMMARY": {
           const s = await getSettings();
           const summary = await fetchJson(
-            `${s.backendBaseUrl}/sessions/evidence-summary?session_id=${encodeURIComponent(
-              message.payload.sessionId
-            )}`,
+            `${s.backendBaseUrl}/sessions/evidence-summary?session_id=${encodeURIComponent(message.payload.sessionId)}`,
             { method: "GET" }
           );
           sendResponse({ ok: true, summary: summary.summary });
@@ -146,7 +146,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         case "START_MEETING_CAPTURE": {
-          const r = await startMeetingCaptureForActiveTab();
+          const r = await startMeetingCaptureForActiveTab(message.payload || {});
           sendResponse(r);
           return;
         }
@@ -202,18 +202,12 @@ async function handleCapturedAction(sender, action) {
 }
 
 async function getSessionInfo(tabId) {
-  const mappings =
-    (await storageGet("local", "continuum_tab_sessions")).continuum_tab_sessions || {};
+  const mappings = (await storageGet("local", "continuum_tab_sessions")).continuum_tab_sessions || {};
   const mapping = mappings[String(tabId)];
   if (!mapping) return { ok: true, sessionId: null, latestResult: null };
 
-  const lastResults =
-    (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
-  return {
-    ok: true,
-    sessionId: mapping.sessionId,
-    latestResult: lastResults[mapping.sessionId] || null
-  };
+  const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
+  return { ok: true, sessionId: mapping.sessionId, latestResult: lastResults[mapping.sessionId] || null };
 }
 
 async function flushSession(sessionId) {
@@ -241,8 +235,7 @@ async function flushSession(sessionId) {
   buffers[sessionId] = buffer;
   await storageSet("local", { continuum_buffers: buffers });
 
-  const lastResults =
-    (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
+  const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
   lastResults[sessionId] = result;
   await storageSet("local", { continuum_last_results: lastResults });
 
@@ -251,9 +244,7 @@ async function flushSession(sessionId) {
 
 async function generateDocsForSession(sessionId) {
   const intent = await getCaptureIntent(sessionId);
-  if (!intent?.process_name) {
-    throw new Error("Set intent first in the Side Panel before generating docs.");
-  }
+  if (!intent?.process_name) throw new Error("Set intent first in the Side Panel before generating docs.");
 
   await flushSession(sessionId);
 
@@ -264,8 +255,7 @@ async function generateDocsForSession(sessionId) {
     body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent })
   });
 
-  const lastResults =
-    (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
+  const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
   lastResults[sessionId] = result;
   await storageSet("local", { continuum_last_results: lastResults });
 
@@ -311,91 +301,44 @@ async function getCaptureIntent(sessionId) {
 }
 
 async function ensureOffscreenDocument() {
-  /*
-    WHAT THIS FIXES
-    1. Detects whether a real offscreen document actually exists
-    2. Recreates it if the stored ready flag is stale
-    3. Waits until OFFSCREEN_READY is received
-    4. Verifies the offscreen doc can actually answer messages
-
-  */
-
   const hasWorkingOffscreen = await pingOffscreen();
-  if (hasWorkingOffscreen) {
-    return;
-  }
+  if (hasWorkingOffscreen) return;
 
   await storageSet("local", { continuum_offscreen_ready: false });
 
-  
   if (chrome.runtime.getContexts) {
-    const contexts = await chrome.runtime.getContexts({
-      contextTypes: ["OFFSCREEN_DOCUMENT"]
-    });
-
-    const hasOffscreenContext = contexts.some(
-      (ctx) => ctx.documentUrl && ctx.documentUrl.includes("offscreen.html")
-    );
-
-    // If one exists but isn't responding, try closing it first.
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] });
+    const hasOffscreenContext = contexts.some((ctx) => ctx.documentUrl && ctx.documentUrl.includes("offscreen.html"));
     if (hasOffscreenContext && chrome.offscreen?.closeDocument) {
-      try {
-        await chrome.offscreen.closeDocument();
-      } catch (error) {
-        // ignore close errors
-      }
+      try { await chrome.offscreen.closeDocument(); } catch (_) {}
     }
   }
 
-  try {
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: ["USER_MEDIA"],
-      justification: "Record meeting audio from the active tab."
-    });
-  } catch (e) {
-    const msg = e?.message ? e.message : String(e);
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["USER_MEDIA"],
+    justification: "Record meeting audio from the active tab + microphone."
+  });
 
-    
-    if (!msg.toLowerCase().includes("exists")) {
-      throw e;
-    }
-  }
-
-  
   for (let i = 0; i < 30; i++) {
     const stored = await storageGet("local", "continuum_offscreen_ready");
-    if (stored.continuum_offscreen_ready) {
-      break;
-    }
+    if (stored.continuum_offscreen_ready) break;
     await sleep(100);
   }
 
-  
   const reachable = await pingOffscreen();
   if (!reachable) {
     await storageSet("local", { continuum_offscreen_ready: false });
-    throw new Error(
-      "Offscreen recorder did not become reachable. Reload the extension and try again."
-    );
+    throw new Error("Offscreen recorder not reachable. Reload extension and try again.");
   }
 }
 
 async function sendToOffscreen(type, payload) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage({ to: "offscreen", type, payload }, (res) => {
-      if (chrome.runtime.lastError) {
-        return reject(new Error(chrome.runtime.lastError.message));
-      }
-
-      if (!res) {
-        return reject(new Error("No response from offscreen recorder."));
-      }
-
-      if (res.ok === false && res.error) {
-        return reject(new Error(res.error));
-      }
-
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      if (!res) return reject(new Error("No response from offscreen recorder."));
+      if (res.ok === false && res.error) return reject(new Error(res.error));
       resolve(res);
     });
   });
@@ -403,46 +346,31 @@ async function sendToOffscreen(type, payload) {
 
 async function pingOffscreen() {
   try {
-    const response = await sendToOffscreen("OFFSCREEN_PING", {});
-    return Boolean(response && response.ok);
-  } catch (error) {
+    const res = await sendToOffscreen("OFFSCREEN_PING", {});
+    return Boolean(res && res.ok);
+  } catch {
     return false;
   }
 }
 
-async function startMeetingCaptureForActiveTab() {
-  const state =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
-
-  if (state.status === "recording") {
-    return { ok: true, ...state };
-  }
+async function startMeetingCaptureForActiveTab(opts) {
+  const state = (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+  if (state.status === "recording") return { ok: true, ...state };
 
   const s = await getSettings();
   const tab = await getActiveTab();
-  if (!tab?.id) {
-    throw new Error("No active tab found.");
-  }
+  if (!tab?.id) throw new Error("No active tab found.");
 
   const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
 
-  // Mark state early so UI shows progress
   await storageSet("local", {
-    continuum_meeting_state: {
-      status: "arming",
-      sessionId: sessionInfo.sessionId,
-      tabId: tab.id,
-      startedAt: Date.now(),
-      lastError: ""
-    }
+    continuum_meeting_state: { status: "arming", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" }
   });
 
   try {
     await ensureOffscreenDocument();
 
-    const streamId = await chrome.tabCapture.getMediaStreamId({
-      targetTabId: tab.id
-    });
+    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
 
     await sendToOffscreen("OFFSCREEN_START_RECORDING", {
       streamId,
@@ -450,83 +378,40 @@ async function startMeetingCaptureForActiveTab() {
       tabId: tab.id,
       backendBaseUrl: s.backendBaseUrl,
       pageUrl: tab.url || "",
-      pageTitle: tab.title || ""
+      pageTitle: tab.title || "",
+      includeMic: true, // MIC ALWAYS
+      notesStyle: s.meetingNotesStyle || "professional_bullets"
     });
 
-    const next = {
-      status: "recording",
-      sessionId: sessionInfo.sessionId,
-      tabId: tab.id,
-      startedAt: Date.now(),
-      lastError: ""
-    };
-
+    const next = { status: "recording", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" };
     await storageSet("local", { continuum_meeting_state: next });
     await chrome.action.setBadgeText({ text: "REC", tabId: tab.id });
-
     return { ok: true, ...next };
   } catch (error) {
-    const message = error?.message ? error.message : String(error);
-
-    await storageSet("local", {
-      continuum_meeting_state: {
-        status: "error",
-        sessionId: sessionInfo.sessionId,
-        tabId: tab.id,
-        startedAt: Date.now(),
-        lastError: message
-      }
-    });
-
+    const msg = error?.message ? error.message : String(error);
+    await storageSet("local", { continuum_meeting_state: { status: "error", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: msg } });
     throw error;
   }
 }
 
 async function stopMeetingCapture() {
-  const state =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+  const state = (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+  if (state.status !== "recording") return { ok: true, status: "idle" };
 
-  if (state.status !== "recording") {
-    return { ok: true, status: "idle" };
-  }
+  await sendToOffscreen("OFFSCREEN_STOP_RECORDING", {});
 
-  try {
-    await sendToOffscreen("OFFSCREEN_STOP_RECORDING", {});
-  } catch (error) {
-    const message = error?.message ? error.message : String(error);
-
-    await storageSet("local", {
-      continuum_meeting_state: {
-        ...state,
-        status: "error",
-        lastError: message
-      }
-    });
-
-    throw error;
-  }
-
-  const next = {
-    ...state,
-    status: "saving",
-    lastError: ""
-  };
-
+  const next = { ...state, status: "saving", lastError: "" };
   await storageSet("local", { continuum_meeting_state: next });
 
   if (typeof state.tabId === "number") {
     await chrome.action.setBadgeText({ text: "...", tabId: state.tabId });
   }
-
   return { ok: true, ...next };
 }
 
 async function handleOffscreenMeetingComplete(payload) {
-  const latest =
-    (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
-
-  const currentState =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
+  const latest = (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
+  const currentState = (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
 
   if (typeof currentState.tabId === "number") {
     await chrome.action.setBadgeText({ text: "", tabId: currentState.tabId });
@@ -535,56 +420,29 @@ async function handleOffscreenMeetingComplete(payload) {
   if (payload?.meeting?.session_id) {
     latest[payload.meeting.session_id] = payload.meeting;
     await storageSet("local", { continuum_latest_meetings: latest });
-
-    await storageSet("local", {
-      continuum_meeting_state: {
-        status: "idle",
-        sessionId: payload.meeting.session_id,
-        lastCompletedAt: Date.now(),
-        lastError: ""
-      }
-    });
-
+    await storageSet("local", { continuum_meeting_state: { status: "idle", sessionId: payload.meeting.session_id, lastCompletedAt: Date.now(), lastError: "" } });
     return;
   }
 
-  await storageSet("local", {
-    continuum_meeting_state: {
-      status: "error",
-      sessionId: currentState.sessionId || null,
-      lastCompletedAt: Date.now(),
-      lastError:
-        payload?.error || "Meeting capture finished without returning a meeting record."
-    }
-  });
+  await storageSet("local", { continuum_meeting_state: { status: "error", sessionId: currentState.sessionId || null, lastCompletedAt: Date.now(), lastError: payload?.error || "Meeting finished without returning a record." } });
 }
 
 async function getMeetingStatus() {
-  const state =
-    (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {
-      status: "idle",
-      lastError: ""
-    };
-
+  const state = (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || { status: "idle", lastError: "" };
   return { ok: true, ...state };
 }
 
 async function getLatestMeeting(sessionId) {
-  const local =
-    (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
+  const local = (await storageGet("local", "continuum_latest_meetings")).continuum_latest_meetings || {};
   if (sessionId && local[sessionId]) return { ok: true, meeting: local[sessionId] };
 
   const s = await getSettings();
-  return await fetchJson(
-    `${s.backendBaseUrl}/meetings/latest?session_id=${encodeURIComponent(sessionId || "")}`,
-    { method: "GET" }
-  );
+  return await fetchJson(`${s.backendBaseUrl}/meetings/latest?session_id=${encodeURIComponent(sessionId || "")}`, { method: "GET" });
 }
 
 async function getOrCreateSessionForTab(tabId, currentUrl) {
   const key = String(tabId);
-  const mappings =
-    (await storageGet("local", "continuum_tab_sessions")).continuum_tab_sessions || {};
+  const mappings = (await storageGet("local", "continuum_tab_sessions")).continuum_tab_sessions || {};
   const existing = mappings[key];
   if (existing && existing.url === currentUrl) return existing;
 
@@ -611,16 +469,8 @@ function fetchJson(url, options) {
   return fetch(url, options).then(async (resp) => {
     const text = await resp.text();
     let data = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { raw: text };
-    }
-
-    if (!resp.ok) {
-      throw new Error(data.detail || data.error || `Request failed: ${resp.status}`);
-    }
-
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    if (!resp.ok) throw new Error(data.detail || data.error || `Request failed: ${resp.status}`);
     return data;
   });
 }
@@ -634,11 +484,7 @@ function storageSet(area, value) {
 }
 
 function getActiveTab() {
-  return new Promise((resolve) =>
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) =>
-      resolve(tabs?.[0] || null)
-    )
-  );
+  return new Promise((resolve) => chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => resolve(tabs?.[0] || null)));
 }
 
 function sleep(ms) {

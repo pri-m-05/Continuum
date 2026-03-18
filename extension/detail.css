@@ -1,0 +1,275 @@
+body {
+  margin: 0;
+  background: #f6f4fb;
+  font-family: Arial, sans-serif;
+  color: #161616;
+}
+
+.page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b5bb3;
+  margin-bottom: 8px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  line-height: 1.15;
+}
+
+.meta {
+  color: #625f6b;
+  font-size: 14px;
+}
+
+.detail-card {
+  background: #fff;
+  border: 1px solid #e7e0f4;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(50, 38, 94, 0.06);
+  padding: 28px;
+}
+
+.ghost,
+.primary {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ghost {
+  border: 1px solid #d8d2e8;
+  background: #fff;
+  color: #272333;
+}
+
+.primary {
+  border: 1px solid #6b5bb3;
+  background: #6b5bb3;
+  color: #fff;
+}
+
+.primary:hover {
+  background: #5d4ea0;
+}
+
+.ghost:hover {
+  background: #faf8ff;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.subtle {
+  color: #666;
+}
+
+.detail-render {
+  min-height: 220px;
+}
+
+.summary-card {
+  background: #faf8ff;
+  border: 1px solid #ece6fb;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+
+.summary-label,
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b5bb3;
+}
+
+.summary-text {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #2b2439;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 460px) 1fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.editor-pane,
+.preview-shell {
+  background: #fcfbff;
+  border: 1px solid #eee7fb;
+  border-radius: 16px;
+  padding: 18px;
+}
+
+.editor-pane {
+  display: grid;
+  gap: 12px;
+  position: sticky;
+  top: 20px;
+}
+
+.text-input,
+.text-area {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d9d0ef;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+  font: inherit;
+  color: #1d1d1f;
+}
+
+.text-input:focus,
+.text-area:focus {
+  outline: none;
+  border-color: #8d7ad8;
+  box-shadow: 0 0 0 3px rgba(107, 91, 179, 0.12);
+}
+
+.summary-input {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.body-input {
+  min-height: 460px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.save-status {
+  min-height: 20px;
+  font-size: 13px;
+}
+
+.preview-doc-title {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #161616;
+  margin-bottom: 14px;
+}
+
+.preview-summary-wrap {
+  background: #faf8ff;
+  border: 1px solid #ece6fb;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+}
+
+.preview-summary {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #2b2439;
+}
+
+.md-rendered {
+  font-size: 15px !important;
+  line-height: 1.7;
+  color: #1d1d1f;
+}
+
+.md-rendered h1,
+.md-rendered h2,
+.md-rendered h3,
+.md-rendered h4 {
+  line-height: 1.25;
+  color: #161616;
+}
+
+.md-rendered h1 {
+  font-size: 2rem;
+  margin: 0 0 14px;
+}
+
+.md-rendered h2 {
+  font-size: 1.3rem;
+  margin-top: 28px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee7fb;
+}
+
+.md-rendered h3 {
+  font-size: 1.1rem;
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+
+.md-rendered p,
+.md-rendered ul,
+.md-rendered ol {
+  margin: 0 0 14px;
+}
+
+.md-rendered ul,
+.md-rendered ol {
+  padding-left: 22px;
+}
+
+.md-rendered li {
+  margin-bottom: 8px;
+}
+
+.md-rendered pre {
+  background: #f4f1fb;
+  border-radius: 12px;
+  padding: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.md-rendered code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (max-width: 980px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-pane {
+    position: static;
+  }
+}

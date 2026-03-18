@@ -1782,6 +1782,151 @@
       ],
       "created_at": "2026-03-11T15:08:38.705455+00:00",
       "updated_at": "2026-03-11T15:08:38.705548+00:00"
+    },
+    "session_1773850267742_9j5acpqa": {
+      "session_id": "session_1773850267742_9j5acpqa",
+      "page": {
+        "url": "https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18",
+        "title": "pri-m-05 (Priyanka Mamman)"
+      },
+      "actions": [
+        {
+          "kind": "page_view",
+          "targetLabel": "pri-m-05 (Priyanka Mamman)",
+          "targetSelector": "document",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18",
+          "pageTitle": "pri-m-05 (Priyanka Mamman)",
+          "timestamp": 1773850267631
+        },
+        {
+          "kind": "page_view",
+          "targetLabel": "pri-m-05 (Priyanka Mamman)",
+          "targetSelector": "document",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18",
+          "pageTitle": "pri-m-05 (Priyanka Mamman)",
+          "timestamp": 1773850277084
+        },
+        {
+          "kind": "click",
+          "targetLabel": "Contribution Graph Day of Week January Jan February Feb March Mar April Apr May ",
+          "targetSelector": "div",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18",
+          "pageTitle": "pri-m-05 (Priyanka Mamman)",
+          "timestamp": 1773850290353
+        },
+        {
+          "kind": "click",
+          "targetLabel": "button",
+          "targetSelector": "button.ajax-pagination-btn.btn",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18",
+          "pageTitle": "pri-m-05 (Priyanka Mamman)",
+          "timestamp": 1773850293657
+        },
+        {
+          "kind": "submit",
+          "targetLabel": "Loading Loading... Seeing something unexpected? Take a look at the GitHub profil",
+          "targetSelector": "form.ajax-pagination-form.js-ajax-pagination",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18",
+          "pageTitle": "pri-m-05 (Priyanka Mamman)",
+          "timestamp": 1773850293689
+        }
+      ],
+      "steps": [
+        "Open page 'pri-m-05 (Priyanka Mamman)' (https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18).",
+        "Click 'Contribution Graph Day of Week January Jan February Feb March Mar April Apr May '.",
+        "Click 'button'.",
+        "Submit 'Loading Loading... Seeing something unexpected? Take a look at the GitHub profil'."
+      ],
+      "created_at": "2026-03-18T16:11:33.818102+00:00",
+      "updated_at": "2026-03-18T16:11:33.818208+00:00"
+    },
+    "session_1773850336949_qv23o462": {
+      "session_id": "session_1773850336949_qv23o462",
+      "page": {
+        "url": "https://github.com/settings/appearance",
+        "title": "Appearance"
+      },
+      "actions": [
+        {
+          "kind": "page_view",
+          "targetLabel": "Appearance",
+          "targetSelector": "document",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/settings/appearance",
+          "pageTitle": "Appearance",
+          "timestamp": 1773850336946
+        },
+        {
+          "kind": "click",
+          "targetLabel": "span",
+          "targetSelector": "span.border.circle",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/settings/appearance",
+          "pageTitle": "Appearance",
+          "timestamp": 1773850346694
+        },
+        {
+          "kind": "click",
+          "targetLabel": "Dark default",
+          "targetSelector": "input#option-dark-dark.hidden-radio-input",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/settings/appearance",
+          "pageTitle": "Appearance",
+          "timestamp": 1773850346696
+        },
+        {
+          "kind": "change",
+          "targetLabel": "Dark default",
+          "targetSelector": "input#option-dark-dark.hidden-radio-input",
+          "inputName": "dark_theme",
+          "inputType": "radio",
+          "valuePreview": "[entered:dark]",
+          "pageUrl": "https://github.com/settings/appearance",
+          "pageTitle": "Appearance",
+          "timestamp": 1773850346727
+        },
+        {
+          "kind": "submit",
+          "targetLabel": "appearance-form",
+          "targetSelector": "form#appearance-form",
+          "inputName": "",
+          "inputType": "",
+          "valuePreview": "",
+          "pageUrl": "https://github.com/settings/appearance",
+          "pageTitle": "Appearance",
+          "timestamp": 1773850347036
+        }
+      ],
+      "steps": [
+        "Open page 'Appearance' (https://github.com/settings/appearance).",
+        "Click 'span'.",
+        "Click 'Dark default'.",
+        "Update field 'dark_theme' with [entered:dark].",
+        "Submit 'appearance-form'."
+      ],
+      "created_at": "2026-03-18T16:12:27.131766+00:00",
+      "updated_at": "2026-03-18T16:12:27.131881+00:00"
     }
   },
   "documents": [
@@ -3992,6 +4137,144 @@
         }
       },
       "created_at": "2026-03-11T15:08:38.727377+00:00"
+    },
+    {
+      "id": "doc_c14ef3be53c94bbbb7d20843e39c3957",
+      "title": "pri-m-05 (Priyanka Mamman) - SOP Draft",
+      "summary": "Formal standard operating procedure draft generated from captured browser actions.",
+      "content": "# Purpose\nDocument the 'pri-m-05 (Priyanka Mamman)' process for team.\n\n# Preconditions\n- User has access to the target application.\n- User is on the correct page before starting.\n- Required source information is available.\n\n# Procedure\n1. Open page 'pri-m-05 (Priyanka Mamman)' (https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18).\n2. Click 'Contribution Graph Day of Week January Jan February Feb March Mar April Apr May '.\n3. Click 'button'.\n4. Submit 'Loading Loading... Seeing something unexpected? Take a look at the GitHub profil'.\n\n# Controls\n- Confirm the correct page is open before editing data.\n- Review field changes before submission.\n- Validate the final submission step.\n- Capture screenshots when evidence is required.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18\n- Session ID: session_1773850267742_9j5acpqa\n- Captured steps: 4\n",
+      "session_id": "session_1773850267742_9j5acpqa",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-18T16:11:33.835961+00:00"
+    },
+    {
+      "id": "doc_a9d692900cb548dc96a2628f9fc9948d",
+      "title": "pri-m-05 (Priyanka Mamman) - Quick Reference",
+      "summary": "Shorter checklist-style process reference.",
+      "content": "# Purpose\nDocument the 'pri-m-05 (Priyanka Mamman)' process for team.\n\n# Preconditions\n- Required access is active.\n- The correct page or record has been opened.\n\n# Procedure\n1. Open page 'pri-m-05 (Priyanka Mamman)' (https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18).\n2. Click 'Contribution Graph Day of Week January Jan February Feb March Mar April Apr May '.\n3. Click 'button'.\n4. Submit 'Loading Loading... Seeing something unexpected? Take a look at the GitHub profil'.\n\n# Controls\n- Verify key fields before submit.\n- Confirm the expected result appears after completion.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18\n- Session ID: session_1773850267742_9j5acpqa\n- Captured steps: 4\n",
+      "session_id": "session_1773850267742_9j5acpqa",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-18T16:11:33.836528+00:00"
+    },
+    {
+      "id": "doc_c3b2dd68745b4e78a46b5d0fc8e1c496",
+      "title": "pri-m-05 (Priyanka Mamman) - Control Narrative",
+      "summary": "Audit-oriented narrative emphasizing control points and evidence.",
+      "content": "# Purpose\nDocument the 'pri-m-05 (Priyanka Mamman)' process for team.\n\n# Preconditions\n- User identity and access have been validated.\n- Input source data has been reviewed.\n\n# Procedure\n1. Open page 'pri-m-05 (Priyanka Mamman)' (https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18).\n2. Click 'Contribution Graph Day of Week January Jan February Feb March Mar April Apr May '.\n3. Click 'button'.\n4. Submit 'Loading Loading... Seeing something unexpected? Take a look at the GitHub profil'.\n\n# Controls\n- Ensure the intended record or workflow page is selected.\n- Review updated fields before submitting.\n- Confirm the completion state or confirmation message.\n- Preserve evidence for audit review.\n\n# Evidence\n- Page URL: https://github.com/pri-m-05?tab=overview&from=2026-03-01&to=2026-03-18\n- Session ID: session_1773850267742_9j5acpqa\n- Captured steps: 4\n",
+      "session_id": "session_1773850267742_9j5acpqa",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-18T16:11:33.836555+00:00"
+    },
+    {
+      "id": "doc_21e7d02949cf44a99bf658300dad981d",
+      "title": "Appearance - SOP Draft",
+      "summary": "Formal standard operating procedure draft generated from captured browser actions.",
+      "content": "# Purpose\nDocument the 'Appearance' process for team.\n\n# Preconditions\n- User has access to the target application.\n- User is on the correct page before starting.\n- Required source information is available.\n\n# Procedure\n1. Open page 'Appearance' (https://github.com/settings/appearance).\n2. Click 'span'.\n3. Click 'Dark default'.\n4. Update field 'dark_theme' with [entered:dark].\n5. Submit 'appearance-form'.\n\n# Controls\n- Confirm the correct page is open before editing data.\n- Review field changes before submission.\n- Validate the final submission step.\n- Capture screenshots when evidence is required.\n\n# Evidence\n- Page URL: https://github.com/settings/appearance\n- Session ID: session_1773850336949_qv23o462\n- Captured steps: 5\n",
+      "session_id": "session_1773850336949_qv23o462",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-18T16:12:27.148283+00:00"
+    },
+    {
+      "id": "doc_47274f88981e4dc7a8a2331dbd000a52",
+      "title": "Appearance - Quick Reference",
+      "summary": "Shorter checklist-style process reference.",
+      "content": "# Purpose\nDocument the 'Appearance' process for team.\n\n# Preconditions\n- Required access is active.\n- The correct page or record has been opened.\n\n# Procedure\n1. Open page 'Appearance' (https://github.com/settings/appearance).\n2. Click 'span'.\n3. Click 'Dark default'.\n4. Update field 'dark_theme' with [entered:dark].\n5. Submit 'appearance-form'.\n\n# Controls\n- Verify key fields before submit.\n- Confirm the expected result appears after completion.\n\n# Evidence\n- Page URL: https://github.com/settings/appearance\n- Session ID: session_1773850336949_qv23o462\n- Captured steps: 5\n",
+      "session_id": "session_1773850336949_qv23o462",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-18T16:12:27.148346+00:00"
+    },
+    {
+      "id": "doc_7e53b8aa55cc43e2a299dd73d1b88315",
+      "title": "Appearance - Control Narrative",
+      "summary": "Audit-oriented narrative emphasizing control points and evidence.",
+      "content": "# Purpose\nDocument the 'Appearance' process for team.\n\n# Preconditions\n- User identity and access have been validated.\n- Input source data has been reviewed.\n\n# Procedure\n1. Open page 'Appearance' (https://github.com/settings/appearance).\n2. Click 'span'.\n3. Click 'Dark default'.\n4. Update field 'dark_theme' with [entered:dark].\n5. Submit 'appearance-form'.\n\n# Controls\n- Ensure the intended record or workflow page is selected.\n- Review updated fields before submitting.\n- Confirm the completion state or confirmation message.\n- Preserve evidence for audit review.\n\n# Evidence\n- Page URL: https://github.com/settings/appearance\n- Session ID: session_1773850336949_qv23o462\n- Captured steps: 5\n",
+      "session_id": "session_1773850336949_qv23o462",
+      "audit": {
+        "passed": true,
+        "issues": [],
+        "applied_rules": {
+          "required_sections": [
+            "Purpose",
+            "Preconditions",
+            "Procedure",
+            "Controls",
+            "Evidence"
+          ],
+          "required_keywords": [],
+          "prohibited_words": []
+        }
+      },
+      "created_at": "2026-03-18T16:12:27.148367+00:00"
     }
   ],
   "workflows": [],

@@ -5,7 +5,8 @@ const DEFAULT_SETTINGS = {
     required_keywords: [],
     prohibited_words: []
   },
-  captureInputValues: false
+  captureInputValues: false,
+  meetingNotesStyle: "professional_bullets"
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -27,6 +28,7 @@ async function loadSettings() {
   };
 
   document.getElementById("backendBaseUrl").value = settings.backendBaseUrl || "";
+  document.getElementById("meetingNotesStyle").value = settings.meetingNotesStyle || "professional_bullets";
   document.getElementById("requiredSections").value = (settings.auditRules.required_sections || []).join("\n");
   document.getElementById("requiredKeywords").value = (settings.auditRules.required_keywords || []).join("\n");
   document.getElementById("prohibitedWords").value = (settings.auditRules.prohibited_words || []).join("\n");
@@ -35,6 +37,8 @@ async function loadSettings() {
 
 async function saveSettings() {
   const backendBaseUrl = document.getElementById("backendBaseUrl").value.trim();
+  const meetingNotesStyle = document.getElementById("meetingNotesStyle").value;
+
   const requiredSections = parseLines(document.getElementById("requiredSections").value);
   const requiredKeywords = parseLines(document.getElementById("requiredKeywords").value);
   const prohibitedWords = parseLines(document.getElementById("prohibitedWords").value);
@@ -42,6 +46,7 @@ async function saveSettings() {
 
   const settings = {
     backendBaseUrl: backendBaseUrl || DEFAULT_SETTINGS.backendBaseUrl,
+    meetingNotesStyle: meetingNotesStyle || "professional_bullets",
     captureInputValues,
     auditRules: {
       required_sections: requiredSections,
@@ -63,15 +68,11 @@ async function refreshAiStatus() {
   try {
     const response = await fetch(`${backendBaseUrl}/config/status`);
     const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.detail || `Request failed: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
 
-    if (data.ai?.configured) {
-      statusEl.textContent = "OpenAI key detected on backend. Meeting transcription and follow-up notes are enabled.";
-    } else {
-      statusEl.textContent = "OpenAI key is NOT loaded on the backend. Meeting recordings can save, but transcription and AI follow-up notes are disabled.";
-    }
+    statusEl.textContent = data.ai?.configured
+      ? "OpenAI key detected on backend. Meeting transcription + notes enabled."
+      : "OpenAI key NOT loaded on backend. Meetings can save, but transcript/notes disabled.";
   } catch (error) {
     statusEl.textContent = `Could not check backend AI status: ${error.message}`;
   }

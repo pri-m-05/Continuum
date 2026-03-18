@@ -13,9 +13,11 @@
           <h1 id="pageTitle">Loading item...</h1>
           <div class="meta" id="pageMeta"></div>
         </div>
-
+        <div id="processIncludeStatus" class="subtle"></div>
         <div class="header-actions">
+          <button id="includeInProcessBtn" class="ghost hidden">Include in Process</button>
           <button id="editDocBtn" class="ghost hidden">Edit</button>
+          <button id="insertScreenshotBtn" class="ghost hidden">Insert Screenshot</button>
           <button id="saveDocBtn" class="primary hidden">Save</button>
           <button id="cancelEditBtn" class="ghost hidden">Cancel</button>
           <button id="backToLibrary" class="ghost">Back to Library</button>
@@ -58,6 +60,26 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="screenshotModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="eyebrow">Insert Screenshot</div>
+            <h2 class="modal-title">Choose a screenshot from this session</h2>
+          </div>
+          <button id="closeScreenshotModalBtn" class="ghost">Close</button>
+        </div>
+
+        <div id="screenshotPickerStatus" class="subtle modal-status">Loading screenshots...</div>
+        <div id="screenshotGrid" class="screenshot-grid"></div>
+
+        <div class="modal-actions">
+          <button id="cancelScreenshotInsertBtn" class="ghost">Cancel</button>
+          <button id="confirmScreenshotInsertBtn" class="primary">Insert</button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="react-dist/preview.js"></script>

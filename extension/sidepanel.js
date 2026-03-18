@@ -6,6 +6,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("libraryBtn").addEventListener("click", () => sendMessage({ type: "OPEN_LIBRARY" }));
   document.getElementById("settingsBtn").addEventListener("click", () => sendMessage({ type: "OPEN_OPTIONS_PAGE" }));
   document.getElementById("saveIntentBtn").addEventListener("click", saveIntent);
+  document.getElementById("addCurrentTabBtn").addEventListener("click", addCurrentTabToProcess);
+  document.getElementById("stopProcessBtn").addEventListener("click", stopProcess);
   document.getElementById("generateBtn").addEventListener("click", generateDocs);
   document.getElementById("captureRecommendedBtn").addEventListener("click", () => captureScreenshot({ recommended: true }));
   document.getElementById("captureAnyBtn").addEventListener("click", () => captureScreenshot({ recommended: false }));
@@ -31,6 +33,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   startMeetingPolling();
 });
+
+let currentProcess = null;
 
 async function pingBackend() {
   const el = document.getElementById("backendStatus");
@@ -65,20 +69,43 @@ async function loadCurrentSession() {
 }
 
 async function loadIntent() {
-  if (!activeSessionId) return;
-  const res = await sendMessage({ type: "GET_CAPTURE_INTENT", payload: { sessionId: activeSessionId } });
-  const intent = res.intent || null;
-  if (!intent) {
-    document.getElementById("intentStatus").textContent = "Intent not set yet. Fill the form and click Save Intent.";
+  const res = await sendMessage({ type: "GET_CURRENT_PROCESS" });
+  currentProcess = res.process || null;
+
+  const status = document.getElementById("intentStatus");
+  const summary = document.getElementById("processSummary");
+  const includedTabs = document.getElementById("includedTabs");
+
+  if (!currentProcess) {
+    status.textContent = "No active process yet. Fill the form and click Start Process.";
+    summary.textContent = "Observation is off.";
+    includedTabs.innerHTML = "";
     return;
   }
+
+  const intent = currentProcess.intent || {};
   document.getElementById("processName").value = intent.process_name || "";
   document.getElementById("docType").value = intent.doc_type || "sop";
   document.getElementById("audience").value = intent.audience || "team";
   document.getElementById("intentNotes").value = intent.notes || "";
   document.getElementById("needScreenshots").checked = !!intent.evidence?.screenshots;
   document.getElementById("needMeeting").checked = !!intent.evidence?.meeting;
-  document.getElementById("intentStatus").textContent = `Intent loaded (${intent.doc_type || "sop"}).`;
+
+  const statusText = currentProcess.status === "stopped" ? "Observation stopped" : "Observing";
+  status.textContent = `${statusText}: ${intent.process_name || "Untitled process"}`;
+  summary.textContent = `Included tabs: ${(currentProcess.includedSessions || []).length} • Included meetings: ${(currentProcess.includedMeetingIds || []).length}`;
+
+  const rows = (currentProcess.includedSessions || []).map((item) => {
+    const isActive = activeSessionId && item.sessionId === activeSessionId;
+    return `
+      <div class="includedRow">
+        <strong>${escapeHtml(item.title || item.url || item.sessionId)}</strong>${isActive ? ' <span class="badge">active tab</span>' : ""}
+        <div class="subtle">${escapeHtml(item.url || item.sessionId || "")}</div>
+      </div>
+    `;
+  }).join("");
+
+  includedTabs.innerHTML = rows ? `<div class="includedList">${rows}</div>` : "";
 }
 
 async function saveIntent() {
@@ -100,26 +127,55 @@ async function saveIntent() {
   };
 
   if (!intent.process_name) {
-    status.textContent = "Please enter a process name (what you're documenting).";
+    status.textContent = "Please enter a process name.";
     return;
   }
 
-  await sendMessage({ type: "SET_CAPTURE_INTENT", payload: { sessionId: activeSessionId, intent } });
-  status.textContent = `Intent saved.`;
+  const res = await sendMessage({ type: "START_PROCESS", payload: { intent } });
+  currentProcess = res.process || null;
+  status.textContent = "Process started. Current tab added.";
+  await loadCurrentSession();
+  await loadIntent();
   await refreshGuidance();
+}
+
+async function addCurrentTabToProcess() {
+  const status = document.getElementById("intentStatus");
+  try {
+    const res = await sendMessage({ type: "ADD_CURRENT_TAB_TO_PROCESS" });
+    currentProcess = res.process || null;
+    status.textContent = "Current tab added to the process.";
+    await loadCurrentSession();
+    await loadIntent();
+    await refreshGuidance();
+  } catch (e) {
+    status.textContent = e.message;
+  }
+}
+
+async function stopProcess() {
+  const status = document.getElementById("intentStatus");
+  try {
+    const res = await sendMessage({ type: "STOP_PROCESS" });
+    currentProcess = res.process || null;
+    status.textContent = currentProcess ? "Observation stopped." : "No active process to stop.";
+    await loadIntent();
+  } catch (e) {
+    status.textContent = e.message;
+  }
 }
 
 async function generateDocs() {
   const box = document.getElementById("latestDraft");
   box.textContent = "Generating...";
 
-  if (!activeSessionId) {
-    box.textContent = "No session yet.";
+  if (!currentProcess?.includedSessions?.length) {
+    box.textContent = "Start a process and include at least one tab first.";
     return;
   }
 
   try {
-    const res = await sendMessage({ type: "GENERATE_DOCS", payload: { sessionId: activeSessionId } });
+    const res = await sendMessage({ type: "GENERATE_DOCS", payload: { processId: currentProcess.processId } });
     renderDraft(res);
   } catch (e) {
     box.textContent = `Error: ${e.message}`;
@@ -127,21 +183,22 @@ async function generateDocs() {
 }
 
 async function refreshGuidance() {
-  if (!activeSessionId) return;
-
-  const res = await sendMessage({ type: "GET_CAPTURE_INTENT", payload: { sessionId: activeSessionId } });
-  const intent = res.intent || null;
   const list = document.getElementById("guidanceList");
 
-  if (!intent) {
-    list.innerHTML = `<div class="subtle">Set intent to get guided screenshots.</div>`;
+  if (!currentProcess?.intent) {
+    list.innerHTML = `<div class="subtle">Start a process to get guided screenshots.</div>`;
     return;
   }
 
-  const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId: activeSessionId } });
-  const screenshotCount = evidence.summary?.screenshot_count || 0;
+  const sessionIds = (currentProcess.includedSessions || []).map((item) => item.sessionId).filter(Boolean);
+  let screenshotCount = 0;
 
-  const plan = buildScreenshotPlan(intent.doc_type);
+  for (const sessionId of sessionIds) {
+    const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId } });
+    screenshotCount += evidence.summary?.screenshot_count || 0;
+  }
+
+  const plan = buildScreenshotPlan(currentProcess.intent.doc_type);
   const nextIndex = Math.min(screenshotCount, plan.length - 1);
 
   list.innerHTML = plan.map((item, idx) => {
@@ -177,16 +234,24 @@ async function captureScreenshot({ recommended }) {
     return;
   }
 
-  const intentRes = await sendMessage({ type: "GET_CAPTURE_INTENT", payload: { sessionId: activeSessionId } });
-  const intent = intentRes.intent;
-  if (!intent) {
-    status.textContent = "Set intent first so screenshots are labeled correctly.";
+  if (!currentProcess?.intent) {
+    status.textContent = "Start a process first so screenshots are attached to the right workflow.";
     return;
   }
 
-  const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId: activeSessionId } });
-  const screenshotCount = evidence.summary?.screenshot_count || 0;
-  const plan = buildScreenshotPlan(intent.doc_type);
+  const includedSessionIds = new Set((currentProcess.includedSessions || []).map((item) => item.sessionId));
+  if (!includedSessionIds.has(activeSessionId)) {
+    status.textContent = "Add the current tab to the process before capturing screenshots here.";
+    return;
+  }
+
+  let screenshotCount = 0;
+  for (const item of currentProcess.includedSessions || []) {
+    const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId: item.sessionId } });
+    screenshotCount += evidence.summary?.screenshot_count || 0;
+  }
+
+  const plan = buildScreenshotPlan(currentProcess.intent.doc_type);
   const nextIndex = Math.min(screenshotCount, plan.length - 1);
   const caption = recommended ? plan[nextIndex].title : "Manual screenshot";
 
@@ -319,7 +384,10 @@ async function loadLatestMeeting() {
     box.innerHTML = `
       <div class="item meeting-view">
         <div class="meeting-meta">
-          <strong>${escapeHtml(meeting.page_title || "Meeting")}</strong>
+          <div class="itemHeader">
+            <strong>${escapeHtml(meeting.page_title || "Meeting")}</strong>
+            <button id="includeMeetingBtn" class="ghost miniBtn">Include in Process</button>
+        </div>
           <div class="subtle">${escapeHtml(meeting.created_at || "")}</div>
         </div>
 
@@ -336,6 +404,18 @@ async function loadLatestMeeting() {
         ${warnings.length ? `<div class="meeting-warnings"><strong>Warnings:</strong> ${escapeHtml(warnings.join(" | "))}</div>` : ""}
       </div>
     `;
+    const includeMeetingBtn = document.getElementById("includeMeetingBtn");
+        if (includeMeetingBtn) {
+        includeMeetingBtn.addEventListener("click", async () => {
+            try {
+            await sendMessage({ type: "INCLUDE_MEETING_IN_PROCESS", payload: { meetingId: meeting.meeting_id || "" } });
+            await loadIntent();
+            } catch (e) {
+            box.innerHTML += `<div class="subtle">${escapeHtml(e.message)}</div>`;
+            }
+        });
+    }
+
     const openLatestMeetingLink = document.getElementById("openLatestMeetingLink");
     if (openLatestMeetingLink) {
     openLatestMeetingLink.addEventListener("click", async (e) => {

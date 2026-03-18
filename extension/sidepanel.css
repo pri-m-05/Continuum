@@ -197,3 +197,30 @@ button.primary { background: #111; }
   border-radius: 10px;
   padding: 10px;
 }
+
+.itemHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.miniBtn {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.includedList {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.includedRow {
+  border: 1px solid #eee;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fafafa;
+}

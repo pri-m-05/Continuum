@@ -58,3 +58,10 @@ class DocumentUpdateRequest(BaseModel):
     title: str
     summary: str = ""
     content: str = ""
+
+class ProcessGenerateRequest(BaseModel):
+    process_id: str = ""
+    session_ids: List[str] = Field(default_factory=list)
+    meeting_ids: List[str] = Field(default_factory=list)
+    rules: Optional[AuditRules] = None
+    intent: Optional[CaptureIntent] = None

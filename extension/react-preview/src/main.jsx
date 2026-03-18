@@ -2,9 +2,18 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 
 const roots = new Map();
+
+const markdownSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src || []), "data", "http", "https"],
+    href: [...(defaultSchema.protocols?.href || []), "http", "https", "mailto"]
+  }
+};
 
 function getRoot(target) {
   const container = typeof target === "string" ? document.getElementById(target) : target;
@@ -20,7 +29,10 @@ function getRoot(target) {
 function Preview({ markdown }) {
   return (
     <div className="md-rendered" style={{ fontFamily: "Arial, sans-serif", fontSize: 13 }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeSanitize, markdownSchema]]}
+      >
         {markdown || "Select an item."}
       </ReactMarkdown>
     </div>

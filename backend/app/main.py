@@ -9,8 +9,16 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-from app.models import AuditRequest, AutomationRequest, DocumentUpdateRequest, GenerateRequest, IngestRequest
+from app.models import (
+    AuditRequest,
+    AutomationRequest,
+    DocumentUpdateRequest,
+    GenerateRequest,
+    IngestRequest,
+    ProcessGenerateRequest,
+)
 from app.services.audit import run_audit
 from app.services.automation import suggest_automation
 from app.services.docs import actions_to_steps, dedupe_actions, generate_document_options
@@ -33,6 +41,10 @@ from app.services.store import (
     get_document_item,
     get_meeting_item,
     update_document_item,
+    list_screenshots,
+    get_screenshot_item,
+    get_sessions_by_ids,
+    get_process_evidence_summary,
 )
 
 app = FastAPI(title="Continuum API", version="1.3.0")
@@ -74,7 +86,6 @@ def config_status():
 def ingest_actions(payload: IngestRequest):
     actions = [action.model_dump() for action in payload.actions]
     page = payload.page.model_dump()
-    intent = payload.intent.model_dump() if payload.intent else None
 
     cleaned_actions = dedupe_actions(actions)
     steps = actions_to_steps(cleaned_actions, page)
@@ -82,21 +93,12 @@ def ingest_actions(payload: IngestRequest):
     upsert_session(session_id=payload.session_id, page=page, actions=cleaned_actions, steps=steps)
 
     evidence = get_session_evidence_summary(payload.session_id)
-    documents = generate_document_options(
-        session_id=payload.session_id, page=page, steps=steps, evidence=evidence, intent=intent
-    )
-
-    rules = payload.rules.model_dump() if payload.rules else None
-    audit = run_audit(documents[0]["content"], rules)
-    saved_documents = save_documents(payload.session_id, documents, audit)
 
     return {
         "ok": True,
         "session_id": payload.session_id,
         "steps": steps,
-        "primary_document": saved_documents[0] if saved_documents else None,
-        "options": saved_documents,
-        "audit": audit,
+        "evidence_summary": evidence,
     }
 
 @app.post("/docs/generate")
@@ -110,14 +112,75 @@ def generate_docs(payload: GenerateRequest):
     intent = payload.intent.model_dump() if payload.intent else None
 
     documents = generate_document_options(payload.session_id, page, steps, evidence=evidence, intent=intent)
+    primary = documents[0:1]
 
     rules = payload.rules.model_dump() if payload.rules else None
-    audit = run_audit(documents[0]["content"], rules)
-    saved_documents = save_documents(payload.session_id, documents, audit)
+    audit = run_audit(primary[0]["content"], rules)
+    saved_documents = save_documents(
+        payload.session_id,
+        primary,
+        audit,
+        extra_fields={"doc_type": (intent or {}).get("doc_type", "sop")},
+    )
 
     return {
         "ok": True,
         "session_id": payload.session_id,
+        "steps": steps,
+        "primary_document": saved_documents[0] if saved_documents else None,
+        "options": saved_documents,
+        "audit": audit,
+    }
+
+@app.post("/docs/generate-process")
+def generate_docs_for_process(payload: ProcessGenerateRequest):
+    if not payload.session_ids:
+        raise HTTPException(status_code=400, detail="At least one included session is required.")
+
+    sessions = get_sessions_by_ids(payload.session_ids)
+    if not sessions:
+        raise HTTPException(status_code=404, detail="No included sessions were found.")
+
+    intent = payload.intent.model_dump() if payload.intent else None
+    primary_page = sessions[0].get("page", {})
+
+    steps = []
+    for session in sessions:
+        steps.extend(session.get("steps", []))
+
+    if not steps:
+        raise HTTPException(status_code=400, detail="No captured steps were found for the included tabs.")
+
+    evidence = get_process_evidence_summary(payload.session_ids, payload.meeting_ids)
+    documents = generate_document_options(
+        payload.process_id or payload.session_ids[0],
+        primary_page,
+        steps,
+        evidence=evidence,
+        intent=intent,
+    )
+    primary = documents[0:1]
+
+    rules = payload.rules.model_dump() if payload.rules else None
+    audit = run_audit(primary[0]["content"], rules)
+
+    saved_documents = save_documents(
+        payload.session_ids[0],
+        primary,
+        audit,
+        extra_fields={
+            "doc_type": (intent or {}).get("doc_type", "sop"),
+            "process_id": payload.process_id or "",
+            "source_session_ids": payload.session_ids,
+            "included_meeting_ids": payload.meeting_ids,
+        },
+    )
+
+    return {
+        "ok": True,
+        "process_id": payload.process_id,
+        "session_ids": payload.session_ids,
+        "meeting_ids": payload.meeting_ids,
         "steps": steps,
         "primary_document": saved_documents[0] if saved_documents else None,
         "options": saved_documents,
@@ -204,6 +267,27 @@ def sessions_screenshot(payload: dict):
 def sessions_latest_screenshot(session_id: str | None = None):
     item = get_latest_screenshot(session_id=session_id)
     return {"ok": True, "screenshot": item}
+
+@app.get("/sessions/screenshots")
+def sessions_screenshots(session_id: str | None = None):
+    items = list_screenshots(session_id=session_id)
+    return {"ok": True, "items": items, "count": len(items)}
+
+@app.get("/screenshots/{screenshot_id}")
+def screenshot_file(screenshot_id: str):
+    item = get_screenshot_item(screenshot_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Screenshot not found.")
+
+    relative_path = item.get("relative_path")
+    if not relative_path:
+        raise HTTPException(status_code=404, detail="Screenshot path missing.")
+
+    file_path = Path(__file__).resolve().parent / relative_path
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Screenshot file missing on disk.")
+
+    return FileResponse(file_path, media_type="image/png", filename=file_path.name)
 
 @app.post("/meetings/upload")
 async def meetings_upload(

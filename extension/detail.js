@@ -1,7 +1,9 @@
 let backendBaseUrl = "http://127.0.0.1:8000";
 let currentMode = "docs";
 let currentDoc = null;
-let isEditing = false;
+let currentMeeting = null;
+let screenshotItems = [];
+let selectedScreenshotId = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSettings();
@@ -15,6 +17,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("editDocBtn").addEventListener("click", enterEditMode);
   document.getElementById("cancelEditBtn").addEventListener("click", cancelEditMode);
   document.getElementById("saveDocBtn").addEventListener("click", saveDocumentEdits);
+  document.getElementById("insertScreenshotBtn").addEventListener("click", openScreenshotPicker);
+  document.getElementById("includeInProcessBtn").addEventListener("click", includeCurrentItemInProcess);
+  document.getElementById("closeScreenshotModalBtn").addEventListener("click", closeScreenshotPicker);
+  document.getElementById("cancelScreenshotInsertBtn").addEventListener("click", closeScreenshotPicker);
+  document.getElementById("confirmScreenshotInsertBtn").addEventListener("click", insertSelectedScreenshot);
 
   document.getElementById("docTitleInput").addEventListener("input", renderEditorPreview);
   document.getElementById("docSummaryInput").addEventListener("input", renderEditorPreview);
@@ -48,6 +55,7 @@ async function loadItem() {
     }
 
     currentDoc = data.item;
+    currentMeeting = null;
     renderDocumentView(currentDoc);
   } catch (e) {
     document.getElementById("detailType").textContent = "Error";
@@ -74,13 +82,15 @@ function buildItemUrl(mode, params) {
 }
 
 function renderDocumentView(doc) {
-  isEditing = false;
   currentDoc = doc;
 
   document.title = `${doc.title || "Document"} · Continuum`;
   document.getElementById("detailType").textContent = "Document";
   document.getElementById("pageTitle").textContent = doc.title || "Untitled Document";
   document.getElementById("pageMeta").textContent = buildMeta(doc.created_at, doc.session_id);
+  document.getElementById("processIncludeStatus").textContent = "";
+  document.getElementById("includeInProcessBtn").classList.remove("hidden");
+  document.getElementById("includeInProcessBtn").textContent = "Include Doc Session";
 
   const summary = String(doc.summary || "").trim();
   const summaryCard = document.getElementById("summaryCard");
@@ -100,13 +110,13 @@ function renderDocumentView(doc) {
   document.getElementById("editState").classList.add("hidden");
 
   document.getElementById("editDocBtn").classList.remove("hidden");
+  document.getElementById("insertScreenshotBtn").classList.add("hidden");
   document.getElementById("saveDocBtn").classList.add("hidden");
   document.getElementById("cancelEditBtn").classList.add("hidden");
   document.getElementById("saveStatus").textContent = "";
 }
 
 function renderMeeting(meeting) {
-  isEditing = false;
   currentDoc = null;
 
   document.title = `${meeting.page_title || "Meeting"} · Continuum`;
@@ -116,10 +126,16 @@ function renderMeeting(meeting) {
 
   document.getElementById("summaryCard").classList.add("hidden");
   document.getElementById("editDocBtn").classList.add("hidden");
+  document.getElementById("insertScreenshotBtn").classList.add("hidden");
   document.getElementById("saveDocBtn").classList.add("hidden");
   document.getElementById("cancelEditBtn").classList.add("hidden");
   document.getElementById("viewState").classList.remove("hidden");
   document.getElementById("editState").classList.add("hidden");
+  currentMeeting = meeting;
+  document.getElementById("processIncludeStatus").textContent = "";
+  document.getElementById("includeInProcessBtn").classList.remove("hidden");
+  document.getElementById("includeInProcessBtn").textContent = "Include Meeting";
+
 
   const notes = meeting.notes || {};
   const warnings = Array.isArray(notes.warnings) ? notes.warnings : [];
@@ -138,8 +154,6 @@ function renderMeeting(meeting) {
 function enterEditMode() {
   if (currentMode !== "docs" || !currentDoc) return;
 
-  isEditing = true;
-
   document.getElementById("docTitleInput").value = currentDoc.title || "";
   document.getElementById("docSummaryInput").value = currentDoc.summary || "";
   document.getElementById("docBodyInput").value = currentDoc.content || "";
@@ -148,6 +162,7 @@ function enterEditMode() {
   document.getElementById("editState").classList.remove("hidden");
 
   document.getElementById("editDocBtn").classList.add("hidden");
+  document.getElementById("insertScreenshotBtn").classList.remove("hidden");
   document.getElementById("saveDocBtn").classList.remove("hidden");
   document.getElementById("cancelEditBtn").classList.remove("hidden");
   document.getElementById("saveStatus").textContent = "";
@@ -156,6 +171,7 @@ function enterEditMode() {
 }
 
 function cancelEditMode() {
+  closeScreenshotPicker();
   if (!currentDoc) return;
   renderDocumentView(currentDoc);
 }
@@ -230,6 +246,158 @@ async function saveDocumentEdits() {
   }
 }
 
+async function openScreenshotPicker() {
+  if (!currentDoc || !currentDoc.session_id) {
+    document.getElementById("saveStatus").textContent = "No session found for this document.";
+    return;
+  }
+
+  const modal = document.getElementById("screenshotModal");
+  const grid = document.getElementById("screenshotGrid");
+  const status = document.getElementById("screenshotPickerStatus");
+
+  modal.classList.remove("hidden");
+  grid.innerHTML = "";
+  status.textContent = "Loading screenshots...";
+
+  try {
+    const res = await fetch(
+      `${backendBaseUrl}/sessions/screenshots?session_id=${encodeURIComponent(currentDoc.session_id)}`
+    );
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || "Could not load screenshots.");
+    }
+
+    screenshotItems = Array.isArray(data.items) ? data.items : [];
+    selectedScreenshotId = screenshotItems.length ? screenshotItems[0].screenshot_id : null;
+
+    if (!screenshotItems.length) {
+      status.textContent = "No screenshots found for this session.";
+      grid.innerHTML = "";
+      return;
+    }
+
+    status.textContent = `Found ${screenshotItems.length} screenshot${screenshotItems.length === 1 ? "" : "s"}.`;
+    renderScreenshotGrid();
+  } catch (e) {
+    status.textContent = e.message || "Could not load screenshots.";
+    grid.innerHTML = "";
+  }
+}
+
+function closeScreenshotPicker() {
+  document.getElementById("screenshotModal").classList.add("hidden");
+}
+
+function renderScreenshotGrid() {
+  const grid = document.getElementById("screenshotGrid");
+
+  grid.innerHTML = screenshotItems.map((item) => {
+    const isSelected = item.screenshot_id === selectedScreenshotId;
+    const caption = item.caption ? escapeHtml(item.caption) : "Screenshot";
+    const ts = formatTimestamp(item.created_at);
+
+    return `
+      <button
+        type="button"
+        class="shot-card${isSelected ? " selected" : ""}"
+        data-screenshot-id="${escapeHtml(item.screenshot_id || "")}"
+      >
+        <img class="shot-thumb" src="${item.data_url}" alt="${caption}" />
+        <div class="shot-meta">
+          <div class="shot-time">${escapeHtml(ts)}</div>
+          <div class="shot-caption">${caption}</div>
+        </div>
+      </button>
+    `;
+  }).join("");
+
+  grid.querySelectorAll(".shot-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      selectedScreenshotId = card.getAttribute("data-screenshot-id");
+      renderScreenshotGrid();
+    });
+  });
+}
+
+function insertSelectedScreenshot() {
+  const selected = screenshotItems.find((item) => item.screenshot_id === selectedScreenshotId);
+  if (!selected) return;
+
+  const bodyInput = document.getElementById("docBodyInput");
+  const imageUrl = `${backendBaseUrl}/screenshots/${encodeURIComponent(selected.screenshot_id)}`;
+  const markdown = `![Screenshot](${imageUrl})`;
+
+  insertTextAtCursor(bodyInput, markdown);
+  renderEditorPreview();
+  closeScreenshotPicker();
+  bodyInput.focus();
+}
+
+function insertTextAtCursor(textarea, text) {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const value = textarea.value;
+
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+
+  const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
+  const needsTrailingNewline = after.length > 0 && !after.startsWith("\n");
+
+  const insertValue =
+    `${needsLeadingNewline ? "\n" : ""}${text}${needsTrailingNewline ? "\n" : ""}`;
+
+  textarea.value = before + insertValue + after;
+
+  const nextPos = before.length + insertValue.length;
+  textarea.selectionStart = nextPos;
+  textarea.selectionEnd = nextPos;
+}
+
+async function includeCurrentItemInProcess() {
+  const status = document.getElementById("processIncludeStatus");
+  status.textContent = "Including...";
+
+  try {
+    if (currentMode === "meetings" && currentMeeting?.meeting_id) {
+      await sendRuntimeMessage({ type: "INCLUDE_MEETING_IN_PROCESS", payload: { meetingId: currentMeeting.meeting_id } });
+      status.textContent = "Meeting included in the current process.";
+      return;
+    }
+
+    if (currentDoc?.session_id) {
+      await sendRuntimeMessage({
+        type: "INCLUDE_SESSION_IN_PROCESS",
+        payload: {
+          sessionId: currentDoc.session_id,
+          title: currentDoc.title || "",
+          label: currentDoc.title || ""
+        }
+      });
+      status.textContent = "Document session included in the current process.";
+      return;
+    }
+
+    status.textContent = "Nothing to include for this item.";
+  } catch (e) {
+    status.textContent = e.message || "Could not include this item.";
+  }
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      if (!response) return reject(new Error("No response from background."));
+      if (response.ok === false && response.error) return reject(new Error(response.error));
+      resolve(response);
+    });
+  });
+}
+
 function renderMarkdownIntoTarget(targetId, markdown) {
   if (typeof window.renderMarkdownInto === "function") {
     window.renderMarkdownInto(targetId, markdown);
@@ -254,6 +422,19 @@ function buildMeta(createdAt, sessionId) {
   if (createdAt) parts.push(createdAt);
   if (sessionId) parts.push(`Session: ${sessionId}`);
   return parts.join(" · ");
+}
+
+function formatTimestamp(value) {
+  if (!value) return "Unknown time";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 function escapeHtml(value) {

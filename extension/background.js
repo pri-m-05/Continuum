@@ -99,6 +99,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
+        case "GET_CURRENT_PROCESS": {
+            const process = await getCurrentProcess();
+            sendResponse({ ok: true, process });
+            return;
+        }
+
+        case "START_PROCESS": {
+            const process = await startProcessForActiveTab(message.payload.intent);
+            sendResponse({ ok: true, process });
+            return;
+        }
+
+        case "ADD_CURRENT_TAB_TO_PROCESS": {
+            const process = await addCurrentTabToCurrentProcess();
+            sendResponse({ ok: true, process });
+            return;
+        }
+
+        case "STOP_PROCESS": {
+            const process = await stopCurrentProcess();
+            sendResponse({ ok: true, process });
+            return;
+        }
+
+        case "INCLUDE_SESSION_IN_PROCESS": {
+            const process = await includeSessionInCurrentProcess(message.payload || {});
+            sendResponse({ ok: true, process });
+            return;
+        }
+
+        case "INCLUDE_MEETING_IN_PROCESS": {
+            const process = await includeMeetingInCurrentProcess(message.payload || {});
+            sendResponse({ ok: true, process });
+            return;
+        }
+
         case "SET_CAPTURE_INTENT": {
           await setCaptureIntent(message.payload.sessionId, message.payload.intent);
           sendResponse({ ok: true });
@@ -128,9 +164,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         case "GENERATE_DOCS": {
-          const r = await generateDocsForSession(message.payload.sessionId);
-          sendResponse(r);
-          return;
+            const r = await generateDocsForCurrentProcess(message.payload || {});
+            sendResponse(r);
+            return;
         }
 
         case "GET_LATEST_MEETING": {
@@ -210,6 +246,119 @@ async function getSessionInfo(tabId) {
   return { ok: true, sessionId: mapping.sessionId, latestResult: lastResults[mapping.sessionId] || null };
 }
 
+async function getCurrentProcess() {
+  return (await storageGet("local", "continuum_current_process")).continuum_current_process || null;
+}
+
+async function saveCurrentProcess(process) {
+  await storageSet("local", { continuum_current_process: process });
+  return process;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+async function startProcessForActiveTab(intent) {
+  const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
+
+  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  const process = {
+    processId: `process_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+    status: "observing",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    intent,
+    includedSessions: [
+      {
+        sessionId: sessionInfo.sessionId,
+        tabId: tab.id,
+        url: tab.url || "",
+        title: tab.title || "",
+        addedAt: nowIso()
+      }
+    ],
+    includedMeetingIds: []
+  };
+
+  await setCaptureIntent(sessionInfo.sessionId, intent);
+  await saveCurrentProcess(process);
+  return process;
+}
+
+async function addCurrentTabToCurrentProcess() {
+  const process = await getCurrentProcess();
+  if (!process?.processId) throw new Error("Start a process first.");
+
+  const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
+
+  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  return await includeSessionInCurrentProcess({
+    sessionId: sessionInfo.sessionId,
+    tabId: tab.id,
+    url: tab.url || "",
+    title: tab.title || ""
+  });
+}
+
+async function includeSessionInCurrentProcess(payload) {
+  const process = await getCurrentProcess();
+  if (!process?.processId) throw new Error("Start a process first.");
+
+  const sessionId = payload.sessionId;
+  if (!sessionId) throw new Error("Session ID is required.");
+
+  const existing = Array.isArray(process.includedSessions) ? process.includedSessions : [];
+  if (!existing.some((item) => item.sessionId === sessionId)) {
+    existing.push({
+      sessionId,
+      tabId: Number.isFinite(payload.tabId) ? payload.tabId : null,
+      url: payload.url || "",
+      title: payload.title || payload.label || "",
+      addedAt: nowIso()
+    });
+  }
+
+  process.includedSessions = existing;
+  process.updatedAt = nowIso();
+
+  if (process.intent) {
+    await setCaptureIntent(sessionId, process.intent);
+  }
+
+  await saveCurrentProcess(process);
+  return process;
+}
+
+async function includeMeetingInCurrentProcess(payload) {
+  const process = await getCurrentProcess();
+  if (!process?.processId) throw new Error("Start a process first.");
+
+  const meetingId = payload.meetingId;
+  if (!meetingId) throw new Error("Meeting ID is required.");
+
+  const existing = Array.isArray(process.includedMeetingIds) ? process.includedMeetingIds : [];
+  if (!existing.includes(meetingId)) {
+    existing.push(meetingId);
+  }
+
+  process.includedMeetingIds = existing;
+  process.updatedAt = nowIso();
+  await saveCurrentProcess(process);
+  return process;
+}
+
+async function stopCurrentProcess() {
+  const process = await getCurrentProcess();
+  if (!process) return null;
+  process.status = "stopped";
+  process.updatedAt = nowIso();
+  await saveCurrentProcess(process);
+  return process;
+}
+
 async function flushSession(sessionId) {
   const s = await getSettings();
   const buffers = (await storageGet("local", "continuum_buffers")).continuum_buffers || {};
@@ -234,17 +383,47 @@ async function flushSession(sessionId) {
   buffer.actions = [];
   buffers[sessionId] = buffer;
   await storageSet("local", { continuum_buffers: buffers });
-
-  const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
-  lastResults[sessionId] = result;
-  await storageSet("local", { continuum_last_results: lastResults });
-
   return result;
+}
+
+async function generateDocsForCurrentProcess(payload) {
+  const process = await getCurrentProcess();
+
+  if (process?.intent?.process_name && Array.isArray(process.includedSessions) && process.includedSessions.length) {
+    const sessionIds = process.includedSessions.map((item) => item.sessionId).filter(Boolean);
+
+    for (const sessionId of sessionIds) {
+      await flushSession(sessionId);
+    }
+
+    const s = await getSettings();
+    const result = await fetchJson(`${s.backendBaseUrl}/docs/generate-process`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        process_id: process.processId,
+        session_ids: sessionIds,
+        meeting_ids: Array.isArray(process.includedMeetingIds) ? process.includedMeetingIds : [],
+        rules: s.auditRules,
+        intent: process.intent
+      })
+    });
+
+    await storageSet("local", { continuum_last_process_result: result });
+
+    const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
+    if (sessionIds[0]) lastResults[sessionIds[0]] = result;
+    await storageSet("local", { continuum_last_results: lastResults });
+
+    return result;
+  }
+
+  return await generateDocsForSession(payload.sessionId);
 }
 
 async function generateDocsForSession(sessionId) {
   const intent = await getCaptureIntent(sessionId);
-  if (!intent?.process_name) throw new Error("Set intent first in the Side Panel before generating docs.");
+  if (!intent?.process_name) throw new Error("Start a process first before generating a document.");
 
   await flushSession(sessionId);
 

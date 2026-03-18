@@ -247,6 +247,16 @@ h1 {
   margin-bottom: 8px;
 }
 
+.md-rendered img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid #ece6fb;
+  margin: 14px 0;
+  box-shadow: 0 6px 20px rgba(50, 38, 94, 0.08);
+}
+
 .md-rendered pre {
   background: #f4f1fb;
   border-radius: 12px;
@@ -257,6 +267,107 @@ h1 {
 
 .md-rendered code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 13, 32, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: min(980px, 100%);
+  max-height: 85vh;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e7e0f4;
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(30, 23, 58, 0.18);
+  padding: 22px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.modal-status {
+  margin-bottom: 16px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.shot-card {
+  border: 1px solid #e8e1f7;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.shot-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(50, 38, 94, 0.08);
+}
+
+.shot-card.selected {
+  border-color: #6b5bb3;
+  box-shadow: 0 0 0 3px rgba(107, 91, 179, 0.14);
+  background: #faf8ff;
+}
+
+.shot-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #ece6fb;
+  background: #f6f4fb;
+  display: block;
+}
+
+.shot-meta {
+  margin-top: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.shot-time {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a3b85;
+}
+
+.shot-caption {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #2b2439;
 }
 
 @media (max-width: 980px) {
@@ -272,4 +383,8 @@ h1 {
   .editor-pane {
     position: static;
   }
+}
+
+#processIncludeStatus {
+  margin-top: 6px;
 }

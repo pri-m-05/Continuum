@@ -101,7 +101,12 @@ def list_sessions() -> List[Dict[str, Any]]:
     return list(data.get("sessions", {}).values())
 
 
-def save_documents(session_id: str, documents: List[Dict[str, Any]], audit: Dict[str, Any]) -> List[Dict[str, Any]]:
+def save_documents(
+    session_id: str,
+    documents: List[Dict[str, Any]],
+    audit: Dict[str, Any],
+    extra_fields: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     data = read_store()
     existing_documents = data.get("documents", [])
     saved = []
@@ -111,13 +116,14 @@ def save_documents(session_id: str, documents: List[Dict[str, Any]], audit: Dict
         record["session_id"] = session_id
         record["audit"] = deepcopy(audit)
         record["created_at"] = _now_iso()
+        if extra_fields:
+            record.update(deepcopy(extra_fields))
         existing_documents.append(record)
         saved.append(record)
 
     data["documents"] = existing_documents
     write_store(data)
     return saved
-
 
 def get_latest_document(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     data = read_store()
@@ -128,6 +134,47 @@ def get_latest_document(session_id: Optional[str] = None) -> Optional[Dict[str, 
         return None
     documents = sorted(documents, key=lambda item: item.get("created_at", ""), reverse=True)
     return documents[0]
+
+def get_sessions_by_ids(session_ids: List[str]) -> List[Dict[str, Any]]:
+    data = read_store()
+    sessions = data.get("sessions", {})
+    items = [deepcopy(sessions[sid]) for sid in session_ids if sid in sessions]
+    return sorted(items, key=lambda item: item.get("created_at", ""))
+
+
+def get_process_evidence_summary(
+    session_ids: List[str],
+    meeting_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    data = read_store()
+    session_set = {sid for sid in session_ids if sid}
+    meeting_set = {mid for mid in (meeting_ids or []) if mid}
+
+    screenshots = [item for item in data.get("screenshots", []) if item.get("session_id") in session_set]
+    meetings = [item for item in data.get("meetings", []) if item.get("meeting_id") in meeting_set]
+
+    latest_screenshot = None
+    if screenshots:
+        latest_screenshot = sorted(screenshots, key=lambda item: item.get("created_at", ""), reverse=True)[0]
+
+    latest_meeting = None
+    if meetings:
+        latest_meeting = sorted(meetings, key=lambda item: item.get("created_at", ""), reverse=True)[0]
+
+    excerpt = ""
+    if latest_meeting:
+        notes = latest_meeting.get("notes", {}) or {}
+        excerpt = str(notes.get("summary") or latest_meeting.get("transcript") or "").strip()[:400]
+
+    return {
+        "session_ids": list(session_set),
+        "meeting_ids": list(meeting_set),
+        "screenshot_count": len(screenshots),
+        "meeting_count": len(meetings),
+        "latest_screenshot": latest_screenshot,
+        "latest_meeting": latest_meeting,
+        "latest_meeting_excerpt": excerpt,
+    }
 
 def get_document_item(created_at: Optional[str] = None, session_id: Optional[str] = None, title: Optional[str] = None) -> Optional[Dict[str, Any]]:
     data = read_store()
@@ -253,6 +300,24 @@ def get_latest_screenshot(session_id: Optional[str] = None) -> Optional[Dict[str
     screenshots = sorted(screenshots, key=lambda item: item.get("created_at", ""), reverse=True)
     return screenshots[0]
 
+def list_screenshots(session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    data = read_store()
+    screenshots = data.get("screenshots", [])
+
+    if session_id:
+        screenshots = [item for item in screenshots if item.get("session_id") == session_id]
+
+    return sorted(screenshots, key=lambda item: item.get("created_at", ""), reverse=True)
+
+def get_screenshot_item(screenshot_id: str) -> Optional[Dict[str, Any]]:
+    data = read_store()
+    screenshots = data.get("screenshots", [])
+
+    for item in screenshots:
+        if item.get("screenshot_id") == screenshot_id:
+            return item
+
+    return None
 
 def save_meeting_record(
     session_id: str,

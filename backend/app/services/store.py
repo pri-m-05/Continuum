@@ -129,6 +129,20 @@ def get_latest_document(session_id: Optional[str] = None) -> Optional[Dict[str, 
     documents = sorted(documents, key=lambda item: item.get("created_at", ""), reverse=True)
     return documents[0]
 
+def get_document_item(created_at: Optional[str] = None, session_id: Optional[str] = None, title: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    data = read_store()
+    documents = sorted(data.get("documents", []), key=lambda item: item.get("created_at", ""), reverse=True)
+
+    for doc in documents:
+        if created_at and doc.get("created_at") != created_at:
+            continue
+        if session_id and doc.get("session_id") != session_id:
+            continue
+        if title and doc.get("title") != title:
+            continue
+        return doc
+
+    return None
 
 def search_documents(query: str) -> List[Dict[str, Any]]:
     data = read_store()
@@ -287,6 +301,20 @@ def get_session_evidence_summary(session_id: str) -> Dict[str, Any]:
         "latest_meeting_excerpt": excerpt,
     }
 
+def get_meeting_item(meeting_id: Optional[str] = None, created_at: Optional[str] = None, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    data = read_store()
+    meetings = sorted(data.get("meetings", []), key=lambda item: item.get("created_at", ""), reverse=True)
+
+    for meeting in meetings:
+        if meeting_id and meeting.get("meeting_id") != meeting_id:
+            continue
+        if created_at and meeting.get("created_at") != created_at:
+            continue
+        if session_id and meeting.get("session_id") != session_id:
+            continue
+        return meeting
+
+    return None
 
 # Added for Library support (Meetings tab)
 def list_meetings() -> List[Dict[str, Any]]:

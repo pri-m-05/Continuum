@@ -30,6 +30,8 @@ from app.services.store import (
     upsert_session,
     list_meetings,
     search_meetings,
+    get_document_item,
+    get_meeting_item,
 )
 
 app = FastAPI(title="Continuum API", version="1.3.0")
@@ -126,6 +128,13 @@ def docs_search(query: str = Query(default="")):
     items = search_documents(query)
     return {"ok": True, "items": items, "count": len(items)}
 
+@app.get("/docs/item")
+def docs_item(created_at: str | None = None, session_id: str | None = None, title: str | None = None):
+    item = get_document_item(created_at=created_at, session_id=session_id, title=title)
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return {"ok": True, "item": item}
+
 @app.get("/docs/latest")
 def docs_latest(session_id: str | None = None):
     item = get_latest_document(session_id=session_id)
@@ -221,6 +230,13 @@ async def meetings_upload(
     )
 
     return {"ok": True, "meeting": meeting}
+
+@app.get("/meetings/item")
+def meetings_item(meeting_id: str | None = None, created_at: str | None = None, session_id: str | None = None):
+    meeting = get_meeting_item(meeting_id=meeting_id, created_at=created_at, session_id=session_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    return {"ok": True, "item": meeting}
 
 @app.get("/meetings/latest")
 def meetings_latest(session_id: str | None = None):

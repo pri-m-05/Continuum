@@ -63,16 +63,22 @@
           <label><input type="checkbox" id="needMeeting" /> Include meeting transcript + notes</label>
         </div>
 
-        <div class="row">
-          <button id="saveIntentBtn">Start Process</button>
-          <button id="addCurrentTabBtn" class="ghost">Add Current Tab</button>
-          <button id="generateBtn" class="primary">Generate Document</button>
+        <div class="controlStack">
+        <div class="controlRow controlRow--three">
+            <button id="saveIntentBtn">Start</button>
+            <button id="pauseIntentBtn" class="ghost">Pause</button>
+            <button id="stopIntentBtn" class="ghost">Stop</button>
         </div>
 
-        <div id="intentStatus" class="subtle"></div>
-        <div class="row">
-            <button id="stopProcessBtn" class="ghost">Stop Process</button>
+        <div class="controlRow">
+            <button id="addCurrentTabBtn" class="ghost fullWidth">Add Current Tab</button>
         </div>
+
+        <button id="generateBtn" class="primary fullWidth">Generate Document</button>
+        </div>
+
+        <div id="captureState" class="subtle"></div>
+        <div id="intentStatus" class="subtle"></div>
         <div id="processSummary" class="subtle"></div>
         <div id="includedTabs" class="list"></div>
       </section>

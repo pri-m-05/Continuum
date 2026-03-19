@@ -224,3 +224,30 @@ button.primary { background: #111; }
   padding: 8px;
   background: #fafafa;
 }
+
+.controlStack {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.controlRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.controlRow--three button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.fullWidth {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

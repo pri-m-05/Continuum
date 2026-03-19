@@ -135,6 +135,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
 
+        case "GET_CAPTURE_STATE": {
+            const state = await getCaptureState(message.payload?.sessionId || "");
+            sendResponse({ ok: true, state });
+            return;
+        }
+
+        case "START_CAPTURE": {
+            const r = await startCaptureForSession(message.payload || {});
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
+        case "TOGGLE_CAPTURE_PAUSE": {
+            const r = await toggleCapturePause(message.payload || {});
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
+        case "STOP_CAPTURE": {
+            const r = await stopCaptureForSession(message.payload || {});
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
         case "SET_CAPTURE_INTENT": {
           await setCaptureIntent(message.payload.sessionId, message.payload.intent);
           sendResponse({ ok: true });
@@ -221,6 +245,11 @@ async function handleCapturedAction(sender, action) {
   const sessionInfo = await getOrCreateSessionForTab(tabId, page.url);
   const sessionId = sessionInfo.sessionId;
 
+  const captureState = await getCaptureState(sessionId);
+  if (captureState.status === "paused" || captureState.status === "stopped") {
+    return { sessionId, ignored: true, state: captureState };
+  }
+
   const buffers = (await storageGet("local", "continuum_buffers")).continuum_buffers || {};
   const existing = buffers[sessionId] || { sessionId, tabId, page, actions: [] };
 
@@ -283,6 +312,7 @@ async function startProcessForActiveTab(intent) {
   };
 
   await setCaptureIntent(sessionInfo.sessionId, intent);
+  await setCaptureState(sessionInfo.sessionId, "observing");
   await saveCurrentProcess(process);
   return process;
 }
@@ -328,6 +358,15 @@ async function includeSessionInCurrentProcess(payload) {
     await setCaptureIntent(sessionId, process.intent);
   }
 
+  process.includedSessions = existing;
+  process.updatedAt = nowIso();
+
+  const targetStatus =
+    process.status === "paused" ? "paused" :
+    process.status === "stopped" ? "stopped" :
+    "observing";
+
+  await setCaptureState(sessionId, targetStatus);
   await saveCurrentProcess(process);
   return process;
 }
@@ -421,6 +460,8 @@ async function generateDocsForCurrentProcess(payload) {
   return await generateDocsForSession(payload.sessionId);
 }
 
+
+
 async function generateDocsForSession(sessionId) {
   const intent = await getCaptureIntent(sessionId);
   if (!intent?.process_name) throw new Error("Start a process first before generating a document.");
@@ -448,6 +489,14 @@ async function captureScreenshotForActiveTab(payload) {
 
   const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
   const sessionId = payload?.sessionId || sessionInfo.sessionId;
+
+  const captureState = await getCaptureState(sessionId);
+  if (captureState.status === "paused") {
+    throw new Error("Observation is paused. Resume before capturing screenshots.");
+  }
+  if (captureState.status === "stopped") {
+    throw new Error("Observation is stopped. Start again before capturing screenshots.");
+  }
 
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
 
@@ -477,6 +526,78 @@ async function setCaptureIntent(sessionId, intent) {
 async function getCaptureIntent(sessionId) {
   const all = (await storageGet("local", "continuum_intents")).continuum_intents || {};
   return all[sessionId] || null;
+}
+
+async function getAllCaptureStates() {
+  return (await storageGet("local", "continuum_capture_states")).continuum_capture_states || {};
+}
+
+async function getCaptureState(sessionId) {
+  if (!sessionId) return { status: "idle", updatedAt: null };
+  const states = await getAllCaptureStates();
+  return states[sessionId] || { status: "observing", updatedAt: null };
+}
+
+async function setCaptureState(sessionId, status) {
+  if (!sessionId) throw new Error("Session ID is required.");
+
+  const states = await getAllCaptureStates();
+  states[sessionId] = {
+    status,
+    updatedAt: new Date().toISOString()
+  };
+  await storageSet("local", { continuum_capture_states: states });
+  return states[sessionId];
+}
+
+async function startCaptureForSession(payload) {
+  const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
+
+  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  const sessionId = payload.sessionId || sessionInfo.sessionId;
+
+  if (payload.intent) {
+    await setCaptureIntent(sessionId, payload.intent);
+  }
+
+  const state = await setCaptureState(sessionId, "observing");
+  return { sessionId, state };
+}
+
+async function toggleCapturePause(payload) {
+  const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
+
+  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  const sessionId = payload.sessionId || sessionInfo.sessionId;
+  const current = await getCaptureState(sessionId);
+
+  if (current.status === "paused") {
+    const state = await setCaptureState(sessionId, "observing");
+    return { sessionId, state };
+  }
+
+  if (current.status === "stopped") {
+    const state = await setCaptureState(sessionId, "observing");
+    return { sessionId, state };
+  }
+
+  await flushSession(sessionId);
+  const state = await setCaptureState(sessionId, "paused");
+  return { sessionId, state };
+}
+
+async function stopCaptureForSession(payload) {
+  const tab = await getActiveTab();
+  if (!tab?.id) throw new Error("No active tab found.");
+
+  const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
+  const sessionId = payload.sessionId || sessionInfo.sessionId;
+
+  await flushSession(sessionId);
+  const state = await setCaptureState(sessionId, "stopped");
+  return { sessionId, state };
 }
 
 async function ensureOffscreenDocument() {

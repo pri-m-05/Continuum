@@ -1,14 +1,17 @@
 let activeSessionId = null;
 let meetingPollHandle = null;
 let lastSeenMeetingCompletedAt = 0;
-
+let currentCaptureState = { status: "idle", updatedAt: null };
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("libraryBtn").addEventListener("click", () => sendMessage({ type: "OPEN_LIBRARY" }));
   document.getElementById("settingsBtn").addEventListener("click", () => sendMessage({ type: "OPEN_OPTIONS_PAGE" }));
+
   document.getElementById("saveIntentBtn").addEventListener("click", saveIntent);
+  document.getElementById("pauseIntentBtn").addEventListener("click", togglePauseCapture);
+  document.getElementById("stopIntentBtn").addEventListener("click", stopProcess);
   document.getElementById("addCurrentTabBtn").addEventListener("click", addCurrentTabToProcess);
-  document.getElementById("stopProcessBtn").addEventListener("click", stopProcess);
   document.getElementById("generateBtn").addEventListener("click", generateDocs);
+
   document.getElementById("captureRecommendedBtn").addEventListener("click", () => captureScreenshot({ recommended: true }));
   document.getElementById("captureAnyBtn").addEventListener("click", () => captureScreenshot({ recommended: false }));
 
@@ -25,8 +28,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   await pingBackend();
   await loadCurrentSession();
   await loadIntent();
+  await loadCaptureState();
   await refreshGuidance();
-
   await refreshMeetingStatus();
   await refreshMicStatus();
   await loadLatestMeeting();
@@ -69,21 +72,22 @@ async function loadCurrentSession() {
 }
 
 async function loadIntent() {
-  const res = await sendMessage({ type: "GET_CURRENT_PROCESS" });
-  currentProcess = res.process || null;
-
   const status = document.getElementById("intentStatus");
   const summary = document.getElementById("processSummary");
   const includedTabs = document.getElementById("includedTabs");
 
+  const res = await sendMessage({ type: "GET_CURRENT_PROCESS" });
+  currentProcess = res.process || null;
+
   if (!currentProcess) {
-    status.textContent = "No active process yet. Fill the form and click Start Process.";
-    summary.textContent = "Observation is off.";
+    status.textContent = "Fill the form and click Start.";
+    summary.textContent = "No active process.";
     includedTabs.innerHTML = "";
     return;
   }
 
   const intent = currentProcess.intent || {};
+
   document.getElementById("processName").value = intent.process_name || "";
   document.getElementById("docType").value = intent.doc_type || "sop";
   document.getElementById("audience").value = intent.audience || "team";
@@ -91,29 +95,63 @@ async function loadIntent() {
   document.getElementById("needScreenshots").checked = !!intent.evidence?.screenshots;
   document.getElementById("needMeeting").checked = !!intent.evidence?.meeting;
 
-  const statusText = currentProcess.status === "stopped" ? "Observation stopped" : "Observing";
-  status.textContent = `${statusText}: ${intent.process_name || "Untitled process"}`;
+  status.textContent = `${currentProcess.status === "paused" ? "Paused" : currentProcess.status === "stopped" ? "Stopped" : "Observing"}: ${intent.process_name || "Untitled process"}`;
   summary.textContent = `Included tabs: ${(currentProcess.includedSessions || []).length} • Included meetings: ${(currentProcess.includedMeetingIds || []).length}`;
 
-  const rows = (currentProcess.includedSessions || []).map((item) => {
-    const isActive = activeSessionId && item.sessionId === activeSessionId;
-    return `
-      <div class="includedRow">
-        <strong>${escapeHtml(item.title || item.url || item.sessionId)}</strong>${isActive ? ' <span class="badge">active tab</span>' : ""}
-        <div class="subtle">${escapeHtml(item.url || item.sessionId || "")}</div>
-      </div>
-    `;
-  }).join("");
+  const rows = (currentProcess.includedSessions || []).map((item) => `
+    <div class="includedRow">
+      <strong>${escapeHtml(item.title || item.url || item.sessionId)}</strong>
+      <div class="subtle">${escapeHtml(item.url || item.sessionId || "")}</div>
+    </div>
+  `).join("");
 
   includedTabs.innerHTML = rows ? `<div class="includedList">${rows}</div>` : "";
 }
 
-async function saveIntent() {
-  const status = document.getElementById("intentStatus");
+async function loadCaptureState() {
+  const stateEl = document.getElementById("captureState");
+
   if (!activeSessionId) {
-    status.textContent = "No active session yet. Interact with the page first.";
+    currentCaptureState = { status: "idle", updatedAt: null };
+    applyCaptureUi();
+    stateEl.textContent = "Observation state: idle";
     return;
   }
+
+  const res = await sendMessage({ type: "GET_CAPTURE_STATE", payload: { sessionId: activeSessionId } });
+  currentCaptureState = res.state || { status: "idle", updatedAt: null };
+
+  const labelMap = {
+    observing: "Observing",
+    paused: "Paused",
+    stopped: "Stopped",
+    idle: "Idle"
+  };
+
+  stateEl.textContent = `Observation state: ${labelMap[currentCaptureState.status] || "Idle"}`;
+  applyCaptureUi();
+}
+
+function applyCaptureUi() {
+  const pauseBtn = document.getElementById("pauseIntentBtn");
+  const stopBtn = document.getElementById("stopIntentBtn");
+  const captureRecommendedBtn = document.getElementById("captureRecommendedBtn");
+  const captureAnyBtn = document.getElementById("captureAnyBtn");
+
+  const status = currentCaptureState?.status || "idle";
+
+  pauseBtn.textContent = status === "paused" ? "Resume" : "Pause";
+
+  pauseBtn.disabled = status === "idle";
+  stopBtn.disabled = status === "idle" || status === "stopped";
+
+  const canCaptureScreenshots = status === "observing";
+  captureRecommendedBtn.disabled = !canCaptureScreenshots;
+  captureAnyBtn.disabled = !canCaptureScreenshots;
+}
+
+async function saveIntent() {
+  const status = document.getElementById("intentStatus");
 
   const intent = {
     process_name: document.getElementById("processName").value.trim(),
@@ -131,23 +169,69 @@ async function saveIntent() {
     return;
   }
 
-  const res = await sendMessage({ type: "START_PROCESS", payload: { intent } });
-  currentProcess = res.process || null;
-  status.textContent = "Process started. Current tab added.";
-  await loadCurrentSession();
-  await loadIntent();
-  await refreshGuidance();
+  try {
+    const res = await sendMessage({
+      type: "START_PROCESS",
+      payload: { intent }
+    });
+
+    currentProcess = res.process || null;
+
+    await loadCurrentSession();
+    await loadIntent();
+    await loadCaptureState();
+    await refreshGuidance();
+
+    status.textContent = "Process started. Current tab added.";
+  } catch (e) {
+    status.textContent = e.message;
+  }
+}
+
+async function togglePauseCapture() {
+  const status = document.getElementById("intentStatus");
+
+  if (!currentProcess?.includedSessions?.length) {
+    status.textContent = "Start a process first.";
+    return;
+  }
+
+  try {
+    for (const item of currentProcess.includedSessions) {
+      await sendMessage({
+        type: "TOGGLE_CAPTURE_PAUSE",
+        payload: { sessionId: item.sessionId }
+      });
+    }
+
+    currentProcess.status = currentProcess.status === "paused" ? "observing" : "paused";
+
+    await loadCurrentSession();
+    await loadCaptureState();
+    await loadIntent();
+    await refreshGuidance();
+
+    status.textContent = currentProcess.status === "paused"
+      ? "Observation paused."
+      : "Observation resumed.";
+  } catch (e) {
+    status.textContent = e.message;
+  }
 }
 
 async function addCurrentTabToProcess() {
   const status = document.getElementById("intentStatus");
+
   try {
     const res = await sendMessage({ type: "ADD_CURRENT_TAB_TO_PROCESS" });
     currentProcess = res.process || null;
-    status.textContent = "Current tab added to the process.";
+
     await loadCurrentSession();
     await loadIntent();
+    await loadCaptureState();
     await refreshGuidance();
+
+    status.textContent = "Current tab added to the process.";
   } catch (e) {
     status.textContent = e.message;
   }
@@ -155,11 +239,26 @@ async function addCurrentTabToProcess() {
 
 async function stopProcess() {
   const status = document.getElementById("intentStatus");
+
   try {
+    if (currentProcess?.includedSessions?.length) {
+      for (const item of currentProcess.includedSessions) {
+        await sendMessage({
+          type: "STOP_CAPTURE",
+          payload: { sessionId: item.sessionId }
+        });
+      }
+    }
+
     const res = await sendMessage({ type: "STOP_PROCESS" });
     currentProcess = res.process || null;
-    status.textContent = currentProcess ? "Observation stopped." : "No active process to stop.";
+
+    await loadCurrentSession();
     await loadIntent();
+    await loadCaptureState();
+    await refreshGuidance();
+
+    status.textContent = currentProcess ? "Process stopped." : "No active process to stop.";
   } catch (e) {
     status.textContent = e.message;
   }
@@ -190,10 +289,24 @@ async function refreshGuidance() {
     return;
   }
 
+  if (!activeSessionId) {
+    document.getElementById("guidanceList").innerHTML = `<div class="subtle">Start observation to get guided screenshots.</div>`;
+    return;
+  }
+
   const sessionIds = (currentProcess.includedSessions || []).map((item) => item.sessionId).filter(Boolean);
   let screenshotCount = 0;
 
   for (const sessionId of sessionIds) {
+    if (currentCaptureState.status === "paused") {
+        list.innerHTML = `<div class="subtle">Observation is paused. Resume to continue guided capture.</div>`;
+        return;
+    }
+
+    if (currentCaptureState.status === "stopped") {
+        list.innerHTML = `<div class="subtle">Observation is stopped. Start again to continue capturing evidence.</div>`;
+        return;
+    }
     const evidence = await sendMessage({ type: "GET_EVIDENCE_SUMMARY", payload: { sessionId } });
     screenshotCount += evidence.summary?.screenshot_count || 0;
   }
@@ -231,6 +344,16 @@ async function captureScreenshot({ recommended }) {
 
   if (!activeSessionId) {
     status.textContent = "No session yet.";
+    return;
+  }
+
+  if (currentCaptureState.status === "paused") {
+    status.textContent = "Observation is paused. Resume before capturing screenshots.";
+    return;
+  }
+
+  if (currentCaptureState.status === "stopped") {
+    status.textContent = "Observation is stopped. Start again before capturing screenshots.";
     return;
   }
 

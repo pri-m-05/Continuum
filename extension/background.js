@@ -199,6 +199,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
 
+        case "START_GUIDED_RUN": {
+            const r = await startGuidedRun(message.payload || {});
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
+        case "GET_GUIDED_RUN_STATE": {
+            const r = await getGuidedRunStateForTab(sender.tab?.id || null);
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
+        case "GUIDED_RUN_STEP": {
+            const r = await moveGuidedRunStep(message.payload || {}, sender.tab?.id || null);
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
+        case "EXIT_GUIDED_RUN": {
+            const r = await exitGuidedRun(sender.tab?.id || null);
+            sendResponse({ ok: true, ...r });
+            return;
+        }
+
         case "GET_LATEST_MEETING": {
           const r = await getLatestMeeting(message.payload.sessionId);
           sendResponse(r);
@@ -777,6 +801,97 @@ async function getLatestMeeting(sessionId) {
 
   const s = await getSettings();
   return await fetchJson(`${s.backendBaseUrl}/meetings/latest?session_id=${encodeURIComponent(sessionId || "")}`, { method: "GET" });
+}
+
+async function getGuidedRunState() {
+  return (await storageGet("local", "continuum_guided_run")).continuum_guided_run || null;
+}
+
+async function saveGuidedRunState(state) {
+  await storageSet("local", { continuum_guided_run: state });
+  return state;
+}
+
+async function clearGuidedRunState() {
+  await storageSet("local", { continuum_guided_run: null });
+}
+
+async function startGuidedRun(payload) {
+  const guide = payload.guide || {};
+  const steps = Array.isArray(guide.steps) ? guide.steps : [];
+  if (!steps.length) throw new Error("No guided steps were available for this document.");
+
+  const startUrl = guide.start_url || steps[0]?.page_url || "";
+  if (!startUrl) throw new Error("No start page was found for this guided run.");
+
+  const tab = await chrome.tabs.create({ url: startUrl, active: true });
+  const state = {
+    guideId: `guide_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+    guideTabId: tab.id,
+    startedAt: nowIso(),
+    updatedAt: nowIso(),
+    currentIndex: 0,
+    status: "running",
+    guide,
+    documentRef: payload.documentRef || {}
+  };
+
+  await saveGuidedRunState(state);
+  return { guidedRun: state };
+}
+
+async function getGuidedRunStateForTab(tabId) {
+  const state = await getGuidedRunState();
+  if (!state || !state.guideTabId || !tabId || state.guideTabId !== tabId || state.status !== "running") {
+    return { guidedRun: null };
+  }
+
+  const steps = Array.isArray(state.guide?.steps) ? state.guide.steps : [];
+  const currentStep = steps[state.currentIndex] || null;
+  return {
+    guidedRun: {
+      guideId: state.guideId,
+      guideTabId: state.guideTabId,
+      currentIndex: state.currentIndex,
+      totalSteps: steps.length,
+      documentTitle: state.guide?.document_title || "Guided Run",
+      currentStep,
+      status: state.status
+    }
+  };
+}
+
+async function moveGuidedRunStep(payload, tabId) {
+  const state = await getGuidedRunState();
+  if (!state || state.status !== "running" || !tabId || state.guideTabId !== tabId) {
+    return { guidedRun: null };
+  }
+
+  const steps = Array.isArray(state.guide?.steps) ? state.guide.steps : [];
+  if (!steps.length) {
+    return { guidedRun: null };
+  }
+
+  const delta = Number.isFinite(payload.delta) ? payload.delta : 0;
+  const nextIndex = Math.max(0, Math.min(steps.length - 1, state.currentIndex + delta));
+  state.currentIndex = nextIndex;
+  state.updatedAt = nowIso();
+  await saveGuidedRunState(state);
+
+  return await getGuidedRunStateForTab(tabId);
+}
+
+async function exitGuidedRun(tabId) {
+  const state = await getGuidedRunState();
+  if (state && tabId && state.guideTabId === tabId) {
+    await clearGuidedRunState();
+    return { exited: true };
+  }
+  if (state && !tabId) {
+    await clearGuidedRunState();
+    return { exited: true };
+  }
+  return { exited: false };
 }
 
 async function getOrCreateSessionForTab(tabId, currentUrl) {

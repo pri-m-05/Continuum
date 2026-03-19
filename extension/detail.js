@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("editDocBtn").addEventListener("click", enterEditMode);
+  document.getElementById("startGuideBtn").addEventListener("click", startGuidedRun);
   document.getElementById("cancelEditBtn").addEventListener("click", cancelEditMode);
   document.getElementById("saveDocBtn").addEventListener("click", saveDocumentEdits);
   document.getElementById("insertScreenshotBtn").addEventListener("click", openScreenshotPicker);
@@ -91,6 +92,7 @@ function renderDocumentView(doc) {
   document.getElementById("processIncludeStatus").textContent = "";
   document.getElementById("includeInProcessBtn").classList.remove("hidden");
   document.getElementById("includeInProcessBtn").textContent = "Include Doc Session";
+  document.getElementById("startGuideBtn").classList.remove("hidden");
 
   const summary = String(doc.summary || "").trim();
   const summaryCard = document.getElementById("summaryCard");
@@ -110,6 +112,7 @@ function renderDocumentView(doc) {
   document.getElementById("editState").classList.add("hidden");
 
   document.getElementById("editDocBtn").classList.remove("hidden");
+  document.getElementById("startGuideBtn").classList.remove("hidden");
   document.getElementById("insertScreenshotBtn").classList.add("hidden");
   document.getElementById("saveDocBtn").classList.add("hidden");
   document.getElementById("cancelEditBtn").classList.add("hidden");
@@ -126,6 +129,7 @@ function renderMeeting(meeting) {
 
   document.getElementById("summaryCard").classList.add("hidden");
   document.getElementById("editDocBtn").classList.add("hidden");
+  document.getElementById("startGuideBtn").classList.add("hidden");
   document.getElementById("insertScreenshotBtn").classList.add("hidden");
   document.getElementById("saveDocBtn").classList.add("hidden");
   document.getElementById("cancelEditBtn").classList.add("hidden");
@@ -162,6 +166,7 @@ function enterEditMode() {
   document.getElementById("editState").classList.remove("hidden");
 
   document.getElementById("editDocBtn").classList.add("hidden");
+  document.getElementById("startGuideBtn").classList.add("hidden");
   document.getElementById("insertScreenshotBtn").classList.remove("hidden");
   document.getElementById("saveDocBtn").classList.remove("hidden");
   document.getElementById("cancelEditBtn").classList.remove("hidden");
@@ -444,4 +449,41 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+async function startGuidedRun() {
+  if (currentMode !== "docs" || !currentDoc) return;
+
+  const status = document.getElementById("processIncludeStatus");
+  status.textContent = "Starting guided run...";
+
+  try {
+    const params = new URLSearchParams();
+    if (currentDoc.created_at) params.set("created_at", currentDoc.created_at);
+    if (currentDoc.session_id) params.set("session_id", currentDoc.session_id);
+    if (currentDoc.title) params.set("title", currentDoc.title);
+
+    const res = await fetch(`${backendBaseUrl}/docs/guide?${params.toString()}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.guide) {
+      throw new Error(data.detail || data.error || "Could not prepare the guided run.");
+    }
+
+    await sendRuntimeMessage({
+      type: "START_GUIDED_RUN",
+      payload: {
+        guide: data.guide,
+        documentRef: {
+          created_at: currentDoc.created_at || "",
+          session_id: currentDoc.session_id || "",
+          title: currentDoc.title || ""
+        }
+      }
+    });
+
+    status.textContent = "Guided run opened in a new tab.";
+  } catch (e) {
+    status.textContent = e.message || "Could not start the guided run.";
+  }
 }

@@ -309,6 +309,15 @@ def list_screenshots(session_id: Optional[str] = None) -> List[Dict[str, Any]]:
 
     return sorted(screenshots, key=lambda item: item.get("created_at", ""), reverse=True)
 
+def list_screenshots_for_sessions(session_ids: List[str]) -> List[Dict[str, Any]]:
+    session_set = {sid for sid in session_ids if sid}
+    if not session_set:
+        return []
+
+    data = read_store()
+    screenshots = [item for item in data.get("screenshots", []) if item.get("session_id") in session_set]
+    return sorted(screenshots, key=lambda item: item.get("created_at", ""))
+
 def get_screenshot_item(screenshot_id: str) -> Optional[Dict[str, Any]]:
     data = read_store()
     screenshots = data.get("screenshots", [])

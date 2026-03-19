@@ -45,6 +45,7 @@ from app.services.store import (
     get_screenshot_item,
     get_sessions_by_ids,
     get_process_evidence_summary,
+    list_screenshots_for_sessions,
 )
 
 app = FastAPI(title="Continuum API", version="1.3.0")
@@ -99,6 +100,79 @@ def ingest_actions(payload: IngestRequest):
         "session_id": payload.session_id,
         "steps": steps,
         "evidence_summary": evidence,
+    }
+
+
+def _guide_instruction_from_action(action: dict[str, Any]) -> str:
+    kind = str(action.get("kind", "")).lower()
+    label = str(action.get("targetLabel") or action.get("inputName") or action.get("targetSelector") or "item").strip()
+
+    if kind == "click":
+        return f"Click {label}."
+    if kind == "change":
+        if action.get("inputName"):
+            return f"Update the {action.get('inputName')} field."
+        return f"Update {label}."
+    if kind == "submit":
+        return f"Submit {label}."
+    return f"Complete the {label} step."
+
+
+def _build_guide_payload(document: dict[str, Any], backend_base_url: str) -> dict[str, Any]:
+    source_session_ids = list(document.get("source_session_ids") or ([document.get("session_id")] if document.get("session_id") else []))
+    sessions = get_sessions_by_ids(source_session_ids)
+    if not sessions:
+        raise HTTPException(status_code=404, detail="No source sessions found for this document.")
+
+    screenshots = list_screenshots_for_sessions(source_session_ids)
+    screenshots_by_session: dict[str, list[dict[str, Any]]] = {}
+    for shot in screenshots:
+        sid = shot.get("session_id")
+        if not sid:
+            continue
+        screenshots_by_session.setdefault(sid, []).append(shot)
+
+    steps: list[dict[str, Any]] = []
+    for session in sessions:
+        session_id = session.get("session_id", "")
+        page = session.get("page", {}) or {}
+        session_screens = screenshots_by_session.get(session_id, [])
+        action_position = 0
+
+        for action in session.get("actions", []) or []:
+            kind = str(action.get("kind", "")).lower()
+            if kind == "page_view":
+                continue
+
+            screenshot = session_screens[action_position] if action_position < len(session_screens) else (session_screens[-1] if session_screens else None)
+
+            steps.append({
+                "step_id": f"guide_step_{len(steps)+1}",
+                "session_id": session_id,
+                "page_url": str(action.get("pageUrl") or page.get("url") or ""),
+                "page_title": str(action.get("pageTitle") or page.get("title") or ""),
+                "action_kind": kind,
+                "instruction": _guide_instruction_from_action(action),
+                "target_label": str(action.get("targetLabel") or "").strip(),
+                "target_selector": str(action.get("targetSelector") or "").strip(),
+                "input_name": str(action.get("inputName") or "").strip(),
+                "value_preview": str(action.get("valuePreview") or "").strip(),
+                "screenshot_url": f"{backend_base_url.rstrip('/')}/screenshots/{screenshot.get('screenshot_id')}" if screenshot and screenshot.get("screenshot_id") else "",
+                "screenshot_caption": str((screenshot or {}).get("caption") or "Screenshot"),
+            })
+            action_position += 1
+
+    if not steps:
+        raise HTTPException(status_code=400, detail="No guided steps could be built from the captured sessions.")
+
+    return {
+        "document_title": document.get("title") or "Guided Run",
+        "document_summary": document.get("summary") or "",
+        "document_created_at": document.get("created_at") or "",
+        "document_session_id": document.get("session_id") or "",
+        "source_session_ids": source_session_ids,
+        "steps": steps,
+        "start_url": steps[0].get("page_url") or sessions[0].get("page", {}).get("url") or "",
     }
 
 @app.post("/docs/generate")
@@ -198,6 +272,15 @@ def docs_item(created_at: str | None = None, session_id: str | None = None, titl
     if not item:
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"ok": True, "item": item}
+
+@app.get("/docs/guide")
+def docs_guide(created_at: str | None = None, session_id: str | None = None, title: str | None = None):
+    item = get_document_item(created_at=created_at, session_id=session_id, title=title)
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    guide = _build_guide_payload(item, backend_base_url="http://127.0.0.1:8000")
+    return {"ok": True, "guide": guide}
 
 @app.post("/docs/update")
 def docs_update(payload: DocumentUpdateRequest):

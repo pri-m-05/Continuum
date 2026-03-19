@@ -111,15 +111,17 @@ async function loadIntent() {
 async function loadCaptureState() {
   const stateEl = document.getElementById("captureState");
 
-  if (!activeSessionId) {
+  if (currentProcess?.status) {
+    currentCaptureState = {
+      status: currentProcess.status,
+      updatedAt: currentProcess.updatedAt || null
+    };
+  } else if (activeSessionId) {
+    const res = await sendMessage({ type: "GET_CAPTURE_STATE", payload: { sessionId: activeSessionId } });
+    currentCaptureState = res.state || { status: "idle", updatedAt: null };
+  } else {
     currentCaptureState = { status: "idle", updatedAt: null };
-    applyCaptureUi();
-    stateEl.textContent = "Observation state: idle";
-    return;
   }
-
-  const res = await sendMessage({ type: "GET_CAPTURE_STATE", payload: { sessionId: activeSessionId } });
-  currentCaptureState = res.state || { status: "idle", updatedAt: null };
 
   const labelMap = {
     observing: "Observing",
@@ -139,11 +141,12 @@ function applyCaptureUi() {
   const captureAnyBtn = document.getElementById("captureAnyBtn");
 
   const status = currentCaptureState?.status || "idle";
+  const hasProcess = !!currentProcess?.processId;
 
   pauseBtn.textContent = status === "paused" ? "Resume" : "Pause";
 
-  pauseBtn.disabled = status === "idle";
-  stopBtn.disabled = status === "idle" || status === "stopped";
+  pauseBtn.disabled = !hasProcess || status === "stopped";
+  stopBtn.disabled = !hasProcess || status === "stopped";
 
   const canCaptureScreenshots = status === "observing";
   captureRecommendedBtn.disabled = !canCaptureScreenshots;
@@ -197,21 +200,15 @@ async function togglePauseCapture() {
   }
 
   try {
-    for (const item of currentProcess.includedSessions) {
-      await sendMessage({
-        type: "TOGGLE_CAPTURE_PAUSE",
-        payload: { sessionId: item.sessionId }
-      });
-    }
-
-    currentProcess.status = currentProcess.status === "paused" ? "observing" : "paused";
+    const res = await sendMessage({ type: "TOGGLE_PROCESS_PAUSE" });
+    currentProcess = res.process || currentProcess;
 
     await loadCurrentSession();
-    await loadCaptureState();
     await loadIntent();
+    await loadCaptureState();
     await refreshGuidance();
 
-    status.textContent = currentProcess.status === "paused"
+    status.textContent = currentProcess?.status === "paused"
       ? "Observation paused."
       : "Observation resumed.";
   } catch (e) {
@@ -268,13 +265,20 @@ async function generateDocs() {
   const box = document.getElementById("latestDraft");
   box.textContent = "Generating...";
 
-  if (!currentProcess?.includedSessions?.length) {
-    box.textContent = "Start a process and include at least one tab first.";
-    return;
-  }
-
   try {
-    const res = await sendMessage({ type: "GENERATE_DOCS", payload: { processId: currentProcess.processId } });
+    const processRes = await sendMessage({ type: "GET_CURRENT_PROCESS" });
+    currentProcess = processRes.process || currentProcess || null;
+
+    if (!currentProcess?.includedSessions?.length) {
+      box.textContent = "Start a process and include at least one tab first.";
+      return;
+    }
+
+    const res = await sendMessage({
+      type: "GENERATE_DOCS",
+      payload: { processId: currentProcess.processId }
+    });
+
     renderDraft(res);
   } catch (e) {
     box.textContent = `Error: ${e.message}`;

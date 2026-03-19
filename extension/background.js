@@ -153,6 +153,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
 
+        case "TOGGLE_PROCESS_PAUSE": {
+            const process = await toggleCurrentProcessPause();
+            sendResponse({ ok: true, process });
+            return;
+        }
+
         case "STOP_CAPTURE": {
             const r = await stopCaptureForSession(message.payload || {});
             sendResponse({ ok: true, ...r });
@@ -586,6 +592,39 @@ async function toggleCapturePause(payload) {
   await flushSession(sessionId);
   const state = await setCaptureState(sessionId, "paused");
   return { sessionId, state };
+}
+
+async function toggleCurrentProcessPause() {
+  const process = await getCurrentProcess();
+  if (!process?.processId) {
+    throw new Error("Start a process first.");
+  }
+
+  const includedSessions = Array.isArray(process.includedSessions) ? process.includedSessions : [];
+  if (!includedSessions.length) {
+    throw new Error("No included tabs in the current process.");
+  }
+
+  const nextStatus = process.status === "paused" ? "observing" : "paused";
+
+  if (nextStatus === "paused") {
+    for (const item of includedSessions) {
+      if (item.sessionId) {
+        await flushSession(item.sessionId);
+      }
+    }
+  }
+
+  for (const item of includedSessions) {
+    if (item.sessionId) {
+      await setCaptureState(item.sessionId, nextStatus);
+    }
+  }
+
+  process.status = nextStatus;
+  process.updatedAt = nowIso();
+  await saveCurrentProcess(process);
+  return process;
 }
 
 async function stopCaptureForSession(payload) {

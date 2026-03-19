@@ -199,6 +199,33 @@ h1 {
   color: #2b2439;
 }
 
+.detail-card,
+.preview-shell,
+.detail-render,
+.md-rendered {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.md-rendered p,
+.md-rendered li,
+.md-rendered a,
+.md-rendered td,
+.md-rendered th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.md-rendered a {
+  text-underline-offset: 2px;
+}
+
+.md-rendered table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+}
+
 .md-rendered {
   font-size: 15px !important;
   line-height: 1.7;

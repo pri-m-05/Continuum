@@ -8,6 +8,30 @@ from typing import Any, Dict, List
 from urllib.parse import urlparse
 import uuid
 
+def _display_host(url: str) -> str:
+    parsed = urlparse(url or "")
+    return (parsed.netloc or "").replace("www.", "") or "link"
+
+
+def _page_label(page: Dict[str, Any]) -> str:
+    title = (page.get("title") or "").strip()
+    if title:
+        return title
+
+    url = (page.get("url") or "").strip()
+    host = _display_host(url)
+    return host if host != "link" else "this page"
+
+
+def _page_markdown_link(page: Dict[str, Any]) -> str:
+    url = (page.get("url") or "").strip()
+    label = _page_label(page)
+
+    if not url:
+        return label
+
+    return f"[{label}]({url})"
+
 
 def dedupe_actions(actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     cleaned: List[Dict[str, Any]] = []
@@ -32,7 +56,7 @@ def dedupe_actions(actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def actions_to_steps(actions: List[Dict[str, Any]], page: Dict[str, Any]) -> List[str]:
     steps: List[str] = []
     if page.get("title") or page.get("url"):
-        steps.append(f"Open page '{page.get('title', 'Untitled Page')}' ({page.get('url', '')}).")
+        steps.append(f"Open page {_page_markdown_link(page)}.")
     for action in actions:
         kind = action.get("kind", "").lower()
         label = action.get("targetLabel", "") or action.get("targetSelector", "") or "item"
@@ -71,7 +95,7 @@ def generate_document_options(session_id: str, page: Dict[str, Any], steps: List
         intro_line += f" Special instructions: {notes}"
 
     evidence_lines = [
-        f"- Page URL: {page.get('url', '')}",
+        f"- Page: {_page_markdown_link(page)}",
         f"- Session ID: {session_id}",
         f"- Captured steps: {len(steps)}",
     ]

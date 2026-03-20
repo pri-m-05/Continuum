@@ -2,6 +2,44 @@ let activeSessionId = null;
 let meetingPollHandle = null;
 let lastSeenMeetingCompletedAt = 0;
 let currentCaptureState = { status: "idle", updatedAt: null };
+
+function getSourceMeta(item) {
+  const sourceBasis = String(
+    item?.source_basis || (item?.source_session_ids || item?.session_id ? "internal_capture" : "internal_draft")
+  );
+
+  const defaults = {
+    internal_capture: {
+      label: "Internal workflow",
+      note: "Built from captured browser actions, screenshots, and any explicitly included process evidence."
+    },
+    internal_draft: {
+      label: "Internal draft",
+      note: "Internal content with no verified captured workflow attached yet."
+    },
+    trusted_external: {
+      label: "Trusted external",
+      note: "Based on trusted public product documentation. Steps may vary by tenant, permissions, or rollout."
+    },
+    mixed: {
+      label: "Mixed sources",
+      note: "Combines internal workflow evidence with trusted external references. Verify against your team process before following."
+    },
+    community: {
+      label: "Community source",
+      note: "Based on community guidance and should be verified against trusted documentation before use."
+    }
+  };
+
+  const fallback = defaults[sourceBasis] || defaults.internal_draft;
+
+  return {
+    basis: sourceBasis,
+    label: String(item?.source_label || fallback.label),
+    note: String(item?.source_note || fallback.note)
+  };
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("libraryBtn").addEventListener("click", () => sendMessage({ type: "OPEN_LIBRARY" }));
   document.getElementById("settingsBtn").addEventListener("click", () => sendMessage({ type: "OPEN_OPTIONS_PAGE" }));
@@ -586,11 +624,15 @@ function renderDraft(result) {
     return;
   }
 
+  const source = getSourceMeta(primary);
+
   box.innerHTML = `
     <div class="item">
-      <div>
+      <div class="itemTitleRow">
         <a href="#" id="openLatestDocLink"><strong>${escapeHtml(primary.title || "Draft")}</strong></a>
+        <span class="source-pill source-pill--${escapeHtml(source.basis)}">${escapeHtml(source.label)}</span>
       </div>
+      <div class="subtle">${escapeHtml(source.note)}</div>
       <div class="subtle">${escapeHtml(primary.summary || "")}</div>
       <pre>${escapeHtml(primary.content || "")}</pre>
     </div>

@@ -89,6 +89,44 @@ def upsert_session(session_id: str, page: Dict[str, Any], actions: List[Dict[str
     write_store(data)
     return existing
 
+def _source_meta_for_basis(source_basis: str) -> Dict[str, str]:
+    mapping = {
+        "internal_capture": {
+            "source_label": "Internal workflow",
+            "source_note": "Built from captured browser actions, screenshots, and any explicitly included process evidence.",
+        },
+        "internal_draft": {
+            "source_label": "Internal draft",
+            "source_note": "Internal content with no verified captured workflow attached yet.",
+        },
+        "trusted_external": {
+            "source_label": "Trusted external",
+            "source_note": "Based on trusted public product documentation. Steps may vary by tenant, permissions, or rollout.",
+        },
+        "mixed": {
+            "source_label": "Mixed sources",
+            "source_note": "Combines internal workflow evidence with trusted external references. Verify against your team process before following.",
+        },
+        "community": {
+            "source_label": "Community source",
+            "source_note": "Based on community guidance and should be verified against trusted documentation before use.",
+        },
+    }
+    return mapping.get(source_basis, mapping["internal_draft"])
+
+
+def _normalize_document_source(document: Dict[str, Any]) -> Dict[str, Any]:
+    item = deepcopy(document)
+    source_basis = str(item.get("source_basis") or "").strip()
+
+    if not source_basis:
+        source_basis = "internal_capture" if item.get("source_session_ids") or item.get("session_id") else "internal_draft"
+        item["source_basis"] = source_basis
+
+    source_meta = _source_meta_for_basis(source_basis)
+    item.setdefault("source_label", source_meta["source_label"])
+    item.setdefault("source_note", source_meta["source_note"])
+    return item
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     data = read_store()
@@ -118,6 +156,7 @@ def save_documents(
         record["created_at"] = _now_iso()
         if extra_fields:
             record.update(deepcopy(extra_fields))
+        record = _normalize_document_source(record)
         existing_documents.append(record)
         saved.append(record)
 
@@ -133,7 +172,7 @@ def get_latest_document(session_id: Optional[str] = None) -> Optional[Dict[str, 
     if not documents:
         return None
     documents = sorted(documents, key=lambda item: item.get("created_at", ""), reverse=True)
-    return documents[0]
+    return _normalize_document_source(documents[0])
 
 def get_sessions_by_ids(session_ids: List[str]) -> List[Dict[str, Any]]:
     data = read_store()
@@ -187,7 +226,7 @@ def get_document_item(created_at: Optional[str] = None, session_id: Optional[str
             continue
         if title and doc.get("title") != title:
             continue
-        return doc
+        return _normalize_document_source(doc)
 
     return None
 
@@ -216,6 +255,7 @@ def update_document_item(
         updated["content"] = content
         updated["updated_at"] = _now_iso()
 
+        updated = _normalize_document_source(updated)
         documents[idx] = updated
         data["documents"] = documents
         write_store(data)
@@ -245,7 +285,7 @@ def search_documents(query: str) -> List[Dict[str, Any]]:
             scored.append((score, doc))
 
     scored.sort(key=lambda item: item[0], reverse=True)
-    return [item[1] for item in scored[:20]]
+    return [_normalize_document_source(item[1]) for item in scored[:20]]
 
 
 def save_screenshot(

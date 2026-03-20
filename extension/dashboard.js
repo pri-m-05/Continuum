@@ -3,6 +3,43 @@ let mode = "docs";
 let items = [];
 let pendingFocus = null;
 
+function getSourceMeta(item) {
+  const sourceBasis = String(
+    item?.source_basis || (item?.source_session_ids || item?.session_id ? "internal_capture" : "internal_draft")
+  );
+
+  const defaults = {
+    internal_capture: {
+      label: "Internal workflow",
+      note: "Built from captured browser actions, screenshots, and any explicitly included process evidence."
+    },
+    internal_draft: {
+      label: "Internal draft",
+      note: "Internal content with no verified captured workflow attached yet."
+    },
+    trusted_external: {
+      label: "Trusted external",
+      note: "Based on trusted public product documentation. Steps may vary by tenant, permissions, or rollout."
+    },
+    mixed: {
+      label: "Mixed sources",
+      note: "Combines internal workflow evidence with trusted external references. Verify against your team process before following."
+    },
+    community: {
+      label: "Community source",
+      note: "Based on community guidance and should be verified against trusted documentation before use."
+    }
+  };
+
+  const fallback = defaults[sourceBasis] || defaults.internal_draft;
+
+  return {
+    basis: sourceBasis,
+    label: String(item?.source_label || fallback.label),
+    note: String(item?.source_note || fallback.note)
+  };
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSettings();
 
@@ -84,10 +121,15 @@ async function runSearch(forcedQuery) {
 
   document.getElementById("list").innerHTML = items.map((it, idx) => {
     if (mode === "docs") {
+      const source = getSourceMeta(it);
       return `
         <div class="item" data-idx="${idx}">
-          <strong>${escapeHtml(it.title || "Untitled")}</strong>
+          <div class="itemTitleRow">
+            <strong>${escapeHtml(it.title || "Untitled")}</strong>
+            <span class="source-pill source-pill--${escapeHtml(source.basis)}">${escapeHtml(source.label)}</span>
+          </div>
           <div class="subtle">${escapeHtml(it.created_at || "")} • Session: ${escapeHtml(it.session_id || "")}</div>
+          <div class="subtle">${escapeHtml(source.note)}</div>
           <div>${escapeHtml(it.summary || "")}</div>
         </div>
       `;
@@ -166,9 +208,12 @@ function showPreview(it) {
   const preview = document.getElementById("preview");
 
   if (mode === "docs") {
+    const source = getSourceMeta(it);
     const markdown = [
       `# ${it.title || "Untitled"}`,
       it.created_at ? `_${it.created_at}_` : "",
+      `**Source basis:** ${source.label}`,
+      source.note ? `_${source.note}_` : "",
       "",
       String(it.content || "")
     ].filter(Boolean).join("\n");

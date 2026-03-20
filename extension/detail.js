@@ -27,6 +27,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("docTitleInput").addEventListener("input", renderEditorPreview);
   document.getElementById("docSummaryInput").addEventListener("input", renderEditorPreview);
   document.getElementById("docBodyInput").addEventListener("input", renderEditorPreview);
+  document.getElementById("qaAskBtn").addEventListener("click", askDocumentQuestion);
+  document.getElementById("qaGuideBtn").addEventListener("click", startGuidedRun);
 
   await loadItem();
 });
@@ -89,6 +91,7 @@ function renderDocumentView(doc) {
   document.getElementById("detailType").textContent = "Document";
   document.getElementById("pageTitle").textContent = doc.title || "Untitled Document";
   document.getElementById("pageMeta").textContent = buildMeta(doc.created_at, doc.session_id);
+  renderSourceBasis(doc);
   document.getElementById("processIncludeStatus").textContent = "";
   document.getElementById("includeInProcessBtn").classList.remove("hidden");
   document.getElementById("includeInProcessBtn").textContent = "Include Doc Session";
@@ -108,6 +111,8 @@ function renderDocumentView(doc) {
 
   renderMarkdownIntoTarget("preview", String(doc.content || ""));
 
+  resetQaSurface();
+  document.getElementById("qaSection").classList.remove("hidden");
   document.getElementById("viewState").classList.remove("hidden");
   document.getElementById("editState").classList.add("hidden");
 
@@ -126,8 +131,9 @@ function renderMeeting(meeting) {
   document.getElementById("detailType").textContent = "Meeting";
   document.getElementById("pageTitle").textContent = meeting.page_title || "Meeting";
   document.getElementById("pageMeta").textContent = buildMeta(meeting.created_at, meeting.session_id);
-
+  hideSourceBasis();
   document.getElementById("summaryCard").classList.add("hidden");
+  document.getElementById("qaSection").classList.add("hidden");
   document.getElementById("editDocBtn").classList.add("hidden");
   document.getElementById("startGuideBtn").classList.add("hidden");
   document.getElementById("insertScreenshotBtn").classList.add("hidden");
@@ -167,6 +173,7 @@ function enterEditMode() {
 
   document.getElementById("editDocBtn").classList.add("hidden");
   document.getElementById("startGuideBtn").classList.add("hidden");
+  document.getElementById("qaSection").classList.add("hidden");
   document.getElementById("insertScreenshotBtn").classList.remove("hidden");
   document.getElementById("saveDocBtn").classList.remove("hidden");
   document.getElementById("cancelEditBtn").classList.remove("hidden");
@@ -362,6 +369,86 @@ function insertTextAtCursor(textarea, text) {
   textarea.selectionEnd = nextPos;
 }
 
+function resetQaSurface() {
+  const status = document.getElementById("qaStatus");
+  const wrap = document.getElementById("qaAnswerWrap");
+  const body = document.getElementById("qaAnswerBody");
+  const citations = document.getElementById("qaCitations");
+
+  if (status) status.textContent = "";
+  if (wrap) wrap.classList.add("hidden");
+  if (body) body.innerHTML = "";
+  if (citations) citations.innerHTML = "";
+}
+
+async function askDocumentQuestion() {
+  if (currentMode !== "docs" || !currentDoc) return;
+
+  const input = document.getElementById("qaQuestionInput");
+  const status = document.getElementById("qaStatus");
+  const wrap = document.getElementById("qaAnswerWrap");
+  const badge = document.getElementById("qaSourceBadge");
+  const note = document.getElementById("qaSourceNote");
+  const citations = document.getElementById("qaCitations");
+
+  const question = String(input.value || "").trim();
+  if (!question) {
+    status.textContent = "Enter a question first.";
+    return;
+  }
+
+  status.textContent = "Searching the document and linked evidence...";
+  wrap.classList.add("hidden");
+  citations.innerHTML = "";
+
+  try {
+    const res = await fetch(`${backendBaseUrl}/docs/ask`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        created_at: currentDoc.created_at,
+        session_id: currentDoc.session_id || "",
+        title: currentDoc.title || "",
+        question
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.answer) {
+      throw new Error(data.detail || data.error || "Could not answer that question.");
+    }
+
+    const answer = data.answer;
+    status.textContent = answer.used_ai
+      ? "Grounded answer ready."
+      : "Grounded answer ready (heuristic fallback).";
+
+    badge.textContent = answer.source_label || "Internal workflow";
+    badge.className = `source-badge source-badge--${escapeHtml(answer.source_basis || "internal_capture")}`;
+    note.textContent = answer.source_note || "";
+
+    renderMarkdownIntoTarget("qaAnswerBody", String(answer.answer_markdown || ""));
+
+    const citationHtml =
+      Array.isArray(answer.citations) && answer.citations.length
+        ? answer.citations
+            .map(
+              (citation) =>
+                `<span class="qa-citation-pill">${escapeHtml(citation.label || citation.id || "Source")}</span>`
+            )
+            .join("")
+        : `<span class="subtle">No citations were returned.</span>`;
+
+    citations.innerHTML = citationHtml;
+    wrap.classList.remove("hidden");
+  } catch (e) {
+    status.textContent = e.message || "Could not answer that question.";
+  }
+}
+
 async function includeCurrentItemInProcess() {
   const status = document.getElementById("processIncludeStatus");
   status.textContent = "Including...";
@@ -440,6 +527,60 @@ function formatTimestamp(value) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function getSourceMeta(item) {
+  const sourceBasis = String(
+    item?.source_basis || (item?.source_session_ids || item?.session_id ? "internal_capture" : "internal_draft")
+  );
+
+  const defaults = {
+    internal_capture: {
+      label: "Internal workflow",
+      note: "Built from captured browser actions, screenshots, and any explicitly included process evidence."
+    },
+    internal_draft: {
+      label: "Internal draft",
+      note: "Internal content with no verified captured workflow attached yet."
+    },
+    trusted_external: {
+      label: "Trusted external",
+      note: "Based on trusted public product documentation. Steps may vary by tenant, permissions, or rollout."
+    },
+    mixed: {
+      label: "Mixed sources",
+      note: "Combines internal workflow evidence with trusted external references. Verify against your team process before following."
+    },
+    community: {
+      label: "Community source",
+      note: "Based on community guidance and should be verified against trusted documentation before use."
+    }
+  };
+
+  const fallback = defaults[sourceBasis] || defaults.internal_draft;
+
+  return {
+    basis: sourceBasis,
+    label: String(item?.source_label || fallback.label),
+    note: String(item?.source_note || fallback.note)
+  };
+}
+
+function renderSourceBasis(item) {
+  const wrap = document.getElementById("sourceBasisWrap");
+  const badge = document.getElementById("sourceBasisBadge");
+  const note = document.getElementById("sourceBasisNote");
+  const meta = getSourceMeta(item);
+
+  badge.textContent = meta.label;
+  badge.className = `source-badge source-badge--${meta.basis}`;
+  note.textContent = meta.note;
+  wrap.classList.remove("hidden");
+}
+
+function hideSourceBasis() {
+  const wrap = document.getElementById("sourceBasisWrap");
+  if (wrap) wrap.classList.add("hidden");
 }
 
 function escapeHtml(value) {

@@ -65,3 +65,9 @@ class ProcessGenerateRequest(BaseModel):
     meeting_ids: List[str] = Field(default_factory=list)
     rules: Optional[AuditRules] = None
     intent: Optional[CaptureIntent] = None
+
+class DocumentAskRequest(BaseModel):
+    created_at: str
+    session_id: Optional[str] = None
+    title: Optional[str] = None
+    question: str

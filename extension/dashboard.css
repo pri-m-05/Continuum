@@ -42,3 +42,46 @@ pre { white-space: pre-wrap; word-break: break-word; background: #f3f3f3; border
   border-radius: 10px;
   padding: 10px;
 }
+
+.itemTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #ddd;
+  white-space: nowrap;
+}
+
+.source-pill--internal_capture,
+.source-pill--internal_draft {
+  background: #f4efff;
+  border-color: #ddd2ff;
+  color: #5b4a91;
+}
+
+.source-pill--trusted_external {
+  background: #edf7ff;
+  border-color: #cfe9ff;
+  color: #155d8b;
+}
+
+.source-pill--mixed {
+  background: #fff7eb;
+  border-color: #f3dbad;
+  color: #725000;
+}
+
+.source-pill--community {
+  background: #fff1f1;
+  border-color: #f5cccc;
+  color: #8a2f2f;
+}

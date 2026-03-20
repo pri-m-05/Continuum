@@ -12,6 +12,10 @@
           <div class="eyebrow" id="detailType">Loading...</div>
           <h1 id="pageTitle">Loading item...</h1>
           <div class="meta" id="pageMeta"></div>
+          <div id="sourceBasisWrap" class="source-basis hidden">
+               <span id="sourceBasisBadge" class="source-badge"></span>
+               <span id="sourceBasisNote" class="source-note"></span>
+          </div>
         </div>
         <div id="processIncludeStatus" class="subtle"></div>
         <div class="header-actions">
@@ -33,6 +37,39 @@
           </div>
 
           <div id="preview" class="detail-render subtle">Loading...</div>
+
+          <section id="qaSection" class="qa-section hidden">
+            <div class="qa-header">
+              <div>
+                <div class="summary-label">Ask about this process</div>
+                <div class="subtle">Grounded on this document and its linked internal evidence.</div>
+              </div>
+              <button id="qaGuideBtn" class="ghost">Start Guided Run</button>
+            </div>
+
+            <div class="qa-composer">
+              <textarea
+                id="qaQuestionInput"
+                class="text-area qa-input"
+                placeholder="Ask a process question, like 'What do I click after sign in?' or 'What evidence is captured?'"
+              ></textarea>
+              <div class="qa-actions">
+                <button id="qaAskBtn" class="primary">Ask</button>
+              </div>
+            </div>
+
+            <div id="qaStatus" class="subtle"></div>
+
+            <div id="qaAnswerWrap" class="qa-answer hidden">
+              <div class="itemTitleRow">
+                <strong>Grounded answer</strong>
+                <span id="qaSourceBadge" class="source-badge"></span>
+              </div>
+              <div id="qaSourceNote" class="subtle"></div>
+              <div id="qaAnswerBody" class="detail-render"></div>
+              <div id="qaCitations" class="qa-citations"></div>
+            </div>
+          </section>
         </section>
 
         <section id="editState" class="editor-grid hidden">

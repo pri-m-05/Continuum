@@ -15,6 +15,7 @@ from app.models import (
     AuditRequest,
     AutomationRequest,
     DocumentUpdateRequest,
+    DocumentAskRequest,
     GenerateRequest,
     IngestRequest,
     ProcessGenerateRequest,
@@ -24,6 +25,7 @@ from app.services.automation import suggest_automation
 from app.services.docs import actions_to_steps, dedupe_actions, generate_document_options
 from app.services.meetings import get_ai_status, save_meeting_upload, transcribe_audio_file
 from app.services.notes import build_meeting_notes
+from app.services.qa import answer_document_question
 from app.services.store import (
     ensure_store_exists,
     get_latest_document,
@@ -281,6 +283,23 @@ def docs_guide(created_at: str | None = None, session_id: str | None = None, tit
 
     guide = _build_guide_payload(item, backend_base_url="http://127.0.0.1:8000")
     return {"ok": True, "guide": guide}
+
+@app.post("/docs/ask")
+def docs_ask(payload: DocumentAskRequest):
+    item = get_document_item(
+        created_at=payload.created_at,
+        session_id=payload.session_id,
+        title=payload.title,
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    try:
+        answer = answer_document_question(item, payload.question)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"ok": True, "item": item, "answer": answer}
 
 @app.post("/docs/update")
 def docs_update(payload: DocumentUpdateRequest):

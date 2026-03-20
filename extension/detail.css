@@ -606,3 +606,16 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.share-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 760px) {
+  .share-grid {
+    grid-template-columns: 1fr;
+  }
+}

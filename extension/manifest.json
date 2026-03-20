@@ -10,7 +10,8 @@
     "activeTab",
     "tabCapture",
     "offscreen",
-    "sidePanel"
+    "sidePanel",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>",

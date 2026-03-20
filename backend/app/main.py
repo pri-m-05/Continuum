@@ -12,6 +12,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from app.models import (
     AuditRequest,
@@ -27,6 +28,7 @@ from app.models import (
 from app.services.audit import run_audit
 from app.services.automation import suggest_automation
 from app.services.docs import actions_to_steps, dedupe_actions, generate_document_options
+from app.services.export_docs import build_docx_bytes, build_email_draft_bytes, build_pdf_bytes
 from app.services.meetings import get_ai_status, save_meeting_upload, transcribe_audio_file
 from app.services.notes import build_meeting_notes
 from app.services.qa import answer_document_question
@@ -362,6 +364,56 @@ def docs_ask(payload: DocumentAskRequest):
         raise HTTPException(status_code=400, detail=str(exc))
 
     return {"ok": True, "item": item, "answer": answer}
+
+@app.get("/docs/export/docx")
+def docs_export_docx(created_at: str | None = None, session_id: str | None = None, title: str | None = None):
+    item = get_document_item(created_at=created_at, session_id=session_id, title=title)
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    content, filename = build_docx_bytes(item)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/docs/export/pdf")
+def docs_export_pdf(created_at: str | None = None, session_id: str | None = None, title: str | None = None):
+    item = get_document_item(created_at=created_at, session_id=session_id, title=title)
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    content, filename = build_pdf_bytes(item)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/docs/export/email-draft")
+def docs_export_email_draft(
+    created_at: str | None = None,
+    session_id: str | None = None,
+    title: str | None = None,
+    attachment_format: str = Query(default="docx"),
+):
+    item = get_document_item(created_at=created_at, session_id=session_id, title=title)
+    if not item:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    fmt = (attachment_format or "docx").lower()
+    if fmt not in {"docx", "pdf"}:
+        raise HTTPException(status_code=400, detail="attachment_format must be 'docx' or 'pdf'.")
+
+    content, filename = build_email_draft_bytes(item, attachment_format=fmt)
+    return Response(
+        content=content,
+        media_type="message/rfc822",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @app.post("/docs/update")
 def docs_update(payload: DocumentUpdateRequest):

@@ -21,6 +21,7 @@
         <div class="header-actions">
           <button id="includeInProcessBtn" class="ghost hidden">Include in Process</button>
           <button id="startGuideBtn" class="ghost hidden">Start Guided Run</button>
+          <button id="shareDocBtn" class="ghost hidden">Share</button>
           <button id="editDocBtn" class="ghost hidden">Edit</button>
           <button id="insertScreenshotBtn" class="ghost hidden">Insert Screenshot</button>
           <button id="saveDocBtn" class="primary hidden">Save</button>
@@ -117,6 +118,31 @@
           <button id="cancelScreenshotInsertBtn" class="ghost">Cancel</button>
           <button id="confirmScreenshotInsertBtn" class="primary">Insert</button>
         </div>
+      </div>
+    </div>
+
+    <div id="shareModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="eyebrow">Share document</div>
+            <h2 class="modal-title">Export or prepare an email draft</h2>
+          </div>
+          <button id="closeShareModalBtn" class="ghost">Close</button>
+        </div>
+
+        <div class="subtle">
+          Email draft downloads as a <strong>.eml</strong> file with the attachment already included.
+        </div>
+
+        <div class="share-grid">
+          <button id="downloadDocxBtn" class="primary">Download DOCX</button>
+          <button id="downloadPdfBtn" class="primary">Download PDF</button>
+          <button id="emailDocxBtn" class="ghost">Email Draft + DOCX</button>
+          <button id="emailPdfBtn" class="ghost">Email Draft + PDF</button>
+        </div>
+
+        <div id="shareStatus" class="subtle modal-status"></div>
       </div>
     </div>
 

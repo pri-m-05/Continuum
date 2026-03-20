@@ -85,3 +85,23 @@ pre { white-space: pre-wrap; word-break: break-word; background: #f3f3f3; border
   border-color: #f5cccc;
   color: #8a2f2f;
 }
+
+.toolbarRow--filters {
+  margin-top: 10px;
+}
+
+.toolbarRow--filters select {
+  min-width: 180px;
+  max-width: 260px;
+  width: auto;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+  color: #111;
+}
+
+.hidden {
+  display: none !important;
+}

@@ -1,6 +1,7 @@
 let backendBaseUrl = "http://127.0.0.1:8000";
 let mode = "docs";
 let items = [];
+let displayedItems = [];
 let pendingFocus = null;
 
 function getSourceMeta(item) {
@@ -65,15 +66,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("searchBtn").addEventListener("click", () => runSearch());
   document.getElementById("refreshBtn").addEventListener("click", () => runSearch(""));
   document.getElementById("externalDocBtn").addEventListener("click", openExternalGuideStudio);
+  document.getElementById("docTypeFilter").addEventListener("change", applyDocControls);
+  document.getElementById("sourceBasisFilter").addEventListener("change", applyDocControls);
+  document.getElementById("docSort").addEventListener("change", applyDocControls);
   document.getElementById("list").addEventListener("click", (e) => {
   const row = e.target.closest(".item");
   if (!row) return;
 
   const idx = Number(row.getAttribute("data-idx"));
-  if (!Number.isFinite(idx) || !items[idx]) return;
+  const currentItems = getCurrentListItems();
+  if (!Number.isFinite(idx) || !currentItems[idx]) return;
 
   markSelected(idx);
-  openDetailPage(items[idx]);
+  openDetailPage(currentItems[idx]);
 });
 
   await runSearch("");
@@ -87,11 +92,14 @@ async function loadSettings() {
 }
 
 function applyModeUI() {
-  document.getElementById("tabDocs").classList.toggle("active", mode === "docs");
-  document.getElementById("tabMeetings").classList.toggle("active", mode === "meetings");
-  document.getElementById("listTitle").textContent = mode === "docs" ? "Documents" : "Meetings";
-  document.getElementById("q").placeholder = mode === "docs" ? "Search docs..." : "Search meetings...";
-  document.getElementById("externalDocBtn").classList.toggle("hidden", mode !== "docs");
+  const docsMode = mode === "docs";
+
+  document.getElementById("tabDocs").classList.toggle("active", docsMode);
+  document.getElementById("tabMeetings").classList.toggle("active", !docsMode);
+  document.getElementById("listTitle").textContent = docsMode ? "Documents" : "Meetings";
+  document.getElementById("q").placeholder = docsMode ? "Search docs..." : "Search meetings...";
+  document.getElementById("externalDocBtn").classList.toggle("hidden", !docsMode);
+  document.getElementById("docControls").classList.toggle("hidden", !docsMode);
 }
 
 function setMode(next) {
@@ -113,14 +121,65 @@ async function runSearch(forcedQuery) {
       : `${backendBaseUrl}/meetings/search?query=${encodeURIComponent(q || "")}`;
 
   const res = await fetch(url).then((r) => r.json());
-  items = res.items || [];
+  items = Array.isArray(res.items) ? res.items : [];
+  displayedItems = [...items];
 
   if (!items.length) {
     document.getElementById("list").textContent = "No results found.";
     return;
   }
 
-  document.getElementById("list").innerHTML = items.map((it, idx) => {
+  if (mode === "docs") {
+    applyDocControls();
+    return;
+  }
+
+  renderList(items);
+}
+
+function applyDocControls() {
+  if (mode !== "docs") {
+    displayedItems = [...items];
+    renderList(displayedItems);
+    return;
+  }
+
+  const docType = document.getElementById("docTypeFilter").value;
+  const sourceBasis = document.getElementById("sourceBasisFilter").value;
+  const sort = document.getElementById("docSort").value;
+
+  let nextItems = [...items];
+
+  if (docType !== "all") {
+    nextItems = nextItems.filter((item) => String(item.doc_type || "").toLowerCase() === docType);
+  }
+
+  if (sourceBasis !== "all") {
+    nextItems = nextItems.filter((item) => getSourceMeta(item).basis === sourceBasis);
+  }
+
+  if (sort === "oldest") {
+    nextItems.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+  } else if (sort === "title_asc") {
+    nextItems.sort((a, b) => String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" }));
+  } else {
+    nextItems.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  }
+
+  displayedItems = nextItems;
+  renderList(displayedItems);
+}
+
+function renderList(listItems) {
+  displayedItems = Array.isArray(listItems) ? listItems : [];
+
+  if (!displayedItems.length) {
+    document.getElementById("list").textContent = "No results match the current filters.";
+    document.getElementById("preview").textContent = "Select an item.";
+    return;
+  }
+
+  document.getElementById("list").innerHTML = displayedItems.map((it, idx) => {
     if (mode === "docs") {
       const source = getSourceMeta(it);
       return `
@@ -129,7 +188,7 @@ async function runSearch(forcedQuery) {
             <strong>${escapeHtml(it.title || "Untitled")}</strong>
             <span class="source-pill source-pill--${escapeHtml(source.basis)}">${escapeHtml(source.label)}</span>
           </div>
-            <div class="subtle">${[
+          <div class="subtle">${[
             escapeHtml(it.created_at || ""),
             it.session_id ? `Session: ${escapeHtml(it.session_id)}` : ""
           ].filter(Boolean).join(" • ")}</div>
@@ -152,16 +211,22 @@ async function runSearch(forcedQuery) {
 
   const selectedIdx = getPreferredIndex();
   markSelected(selectedIdx);
-  showPreview(items[selectedIdx]);
+  showPreview(displayedItems[selectedIdx]);
+}
+
+function getCurrentListItems() {
+  return mode === "docs" ? displayedItems : items;
 }
 
 function getPreferredIndex() {
+  const currentItems = getCurrentListItems();
+
   if (!pendingFocus || pendingFocus.mode !== mode) return 0;
 
   let idx = -1;
 
   if (mode === "meetings") {
-    idx = items.findIndex((it) =>
+    idx = currentItems.findIndex((it) =>
       (pendingFocus.meetingId && it.meeting_id === pendingFocus.meetingId) ||
       (
         pendingFocus.createdAt &&
@@ -170,7 +235,7 @@ function getPreferredIndex() {
       )
     );
   } else {
-    idx = items.findIndex((it) =>
+    idx = currentItems.findIndex((it) =>
       (pendingFocus.createdAt && it.created_at === pendingFocus.createdAt) ||
       (
         pendingFocus.sessionId &&

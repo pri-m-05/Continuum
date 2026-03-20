@@ -19,10 +19,35 @@
         </div>
 
         <div class="toolbarRow">
-          <input id="q" placeholder="Search..." />
-          <button id="searchBtn">Search</button>
-          <button id="refreshBtn" class="ghost">Recent</button>
-          <button id="externalDocBtn" class="ghost">Generate from trusted sources</button>
+            <input id="q" placeholder="Search..." />
+            <button id="searchBtn">Search</button>
+            <button id="refreshBtn" class="ghost">Recent</button>
+            <button id="externalDocBtn" class="ghost">Generate from trusted sources</button>
+        </div>
+
+        <div id="docControls" class="toolbarRow toolbarRow--filters">
+            <select id="docTypeFilter">
+                <option value="all">All doc types</option>
+                <option value="sop">SOP</option>
+                <option value="walkthrough">Walkthrough</option>
+                <option value="training">Training</option>
+                <option value="audit">Audit</option>
+            </select>
+
+            <select id="sourceBasisFilter">
+                <option value="all">All source types</option>
+                <option value="internal_capture">Internal workflow</option>
+                <option value="internal_draft">Internal draft</option>
+                <option value="trusted_external">Trusted external</option>
+                <option value="mixed">Mixed sources</option>
+                <option value="community">Community source</option>
+            </select>
+
+            <select id="docSort">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="title_asc">Title A–Z</option>
+            </select>
         </div>
       </section>
 

@@ -12,7 +12,7 @@
           <div class="eyebrow">Trusted external guide studio</div>
           <h1>Generate and ask about an external process</h1>
           <div class="subtle">
-            Use trusted public documentation to explore a process, ask questions, and generate a draft guide.
+            Describe what you need help with, generate a trusted-external guide, then ask follow-up questions grounded on the sources used.
           </div>
         </div>
       </header>
@@ -49,30 +49,44 @@
           <label class="fieldLabel" for="notesInput">Notes</label>
           <textarea id="notesInput" rows="4" placeholder="Optional instructions or scope notes"></textarea>
 
-          <label class="fieldLabel" for="urlsInput">Trusted source URLs</label>
+          <label class="fieldLabel" for="urlsInput">Trusted source URLs (optional)</label>
           <textarea
             id="urlsInput"
             rows="8"
-            placeholder="Paste one trusted source URL per line&#10;https://learn.microsoft.com/...&#10;https://support.microsoft.com/..."
+            placeholder="Optional: paste trusted source URLs, one per line&#10;If you leave this blank, Continuum will search supported trusted domains for you."
           ></textarea>
 
+          <div id="sourceDiscoveryNote" class="subtle">
+            If no URLs are provided, Continuum will search supported trusted domains automatically.
+          </div>
+
           <div class="setupActions">
-            <button id="generateDraftBtn">Generate Draft Guide</button>
+            <button id="generateDraftBtn">Generate Guide</button>
           </div>
 
           <div id="setupStatus" class="subtle"></div>
+
+          <div id="generatedGuideWrap" class="generatedGuide hidden">
+            <div class="msgMeta">
+              <strong>Generated guide</strong>
+              <span id="generatedGuideBadge" class="sourceBadge">Trusted external</span>
+            </div>
+            <div id="generatedGuideStatus" class="subtle"></div>
+            <div id="generatedGuideSources" class="citations"></div>
+            <button id="openGeneratedGuideBtn" class="secondaryAction hidden">Open saved guide</button>
+          </div>
         </section>
 
         <section class="card chatCard">
           <div class="chatHeader">
             <div>
-              <h2>Ask questions</h2>
-              <div class="subtle">Ask like a chat bot, but grounded only on the trusted sources you provide.</div>
+              <h2>Follow-up questions</h2>
+              <div class="subtle">After the guide is generated, ask follow-up questions grounded on the trusted sources Continuum used.</div>
             </div>
           </div>
 
           <div id="chatLog" class="chatLog">
-            <div class="emptyState">Ask a question to start the external guide conversation.</div>
+            <div class="emptyState">Generate a guide first, then ask follow-up questions here.</div>
           </div>
 
           <div class="chatComposer">
@@ -80,9 +94,10 @@
               id="questionInput"
               rows="4"
               placeholder="Example: What are the main steps after choosing the SharePoint template?"
+              disabled
             ></textarea>
             <div class="chatActions">
-              <button id="askBtn">Ask</button>
+              <button id="askBtn" disabled>Ask follow-up</button>
             </div>
           </div>
           <div id="chatStatus" class="subtle"></div>

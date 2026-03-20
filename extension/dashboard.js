@@ -65,9 +65,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("searchBtn").addEventListener("click", () => runSearch());
   document.getElementById("refreshBtn").addEventListener("click", () => runSearch(""));
   document.getElementById("externalDocBtn").addEventListener("click", openExternalGuideStudio);
-  document.getElementById("closeExternalDocModalBtn").addEventListener("click", closeExternalDocModal);
-  document.getElementById("cancelExternalDocBtn").addEventListener("click", closeExternalDocModal);
-  document.getElementById("submitExternalDocBtn").addEventListener("click", generateExternalDoc);
   document.getElementById("list").addEventListener("click", (e) => {
   const row = e.target.closest(".item");
   if (!row) return;
@@ -260,80 +257,6 @@ function showPreview(it) {
 function openExternalGuideStudio() {
   const url = chrome.runtime.getURL("external_assist.html");
   chrome.tabs.create({ url });
-}
-
-function openExternalDocModal() {
-  document.getElementById("externalDocStatus").textContent = "";
-  document.getElementById("externalDocModal").classList.remove("hidden");
-}
-
-function closeExternalDocModal() {
-  document.getElementById("externalDocModal").classList.add("hidden");
-}
-
-async function generateExternalDoc() {
-  const status = document.getElementById("externalDocStatus");
-  const topic = document.getElementById("externalTopicInput").value.trim();
-  const docType = document.getElementById("externalDocTypeInput").value;
-  const audience = document.getElementById("externalAudienceInput").value;
-  const notes = document.getElementById("externalNotesInput").value.trim();
-  const sourceUrls = document.getElementById("externalUrlsInput").value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (!topic) {
-    status.textContent = "Enter a process/topic first.";
-    return;
-  }
-
-  if (!sourceUrls.length) {
-    status.textContent = "Paste at least one trusted source URL.";
-    return;
-  }
-
-  status.textContent = "Generating from trusted sources...";
-
-  try {
-    const res = await fetch(`${backendBaseUrl}/docs/generate-external`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        topic,
-        doc_type: docType,
-        audience,
-        notes,
-        source_urls: sourceUrls
-      })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok || !data.primary_document) {
-      throw new Error(data.detail || data.error || "Could not generate the external document.");
-    }
-
-    const doc = data.primary_document;
-
-    closeExternalDocModal();
-
-    pendingFocus = {
-      mode: "docs",
-      sessionId: doc.session_id || "",
-      createdAt: doc.created_at || "",
-      meetingId: "",
-      title: doc.title || ""
-    };
-
-    mode = "docs";
-    applyModeUI();
-    await runSearch("");
-    openDetailPage(doc);
-  } catch (e) {
-    status.textContent = e.message || "Could not generate the external document.";
-  }
 }
 
 function escapeHtml(value) {

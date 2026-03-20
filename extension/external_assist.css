@@ -115,6 +115,21 @@ button:hover {
   background: #5d4ea0;
 }
 
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.secondaryAction {
+  background: #fff;
+  color: #241f31;
+  border-color: #d9d0ef;
+}
+
+.secondaryAction:hover {
+  background: #faf7ff;
+}
+
 .setupActions,
 .chatActions {
   display: flex;
@@ -238,6 +253,20 @@ button:hover {
 .md-rendered a {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.generatedGuide {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid #eee7fb;
+  border-radius: 14px;
+  padding: 14px;
+  background: #fcfbff;
+}
+
+.hidden {
+  display: none !important;
 }
 
 @media (max-width: 980px) {

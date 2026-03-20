@@ -4,8 +4,8 @@ import json
 import os
 import re
 from html.parser import HTMLParser
-from typing import Dict, List, Tuple
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 
@@ -20,6 +20,9 @@ TRUSTED_HOSTS = {
     "platform.openai.com",
     "developers.openai.com",
 }
+
+SEARCH_USER_AGENT = "Continuum/1.0 (+trusted external discovery)"
+REQUEST_TIMEOUT = 25
 
 
 def _api_key() -> str:
@@ -67,13 +70,203 @@ def is_trusted_source_url(url: str) -> bool:
     return _normalize_host(parsed.netloc) in TRUSTED_HOSTS
 
 
-def _fetch_source(url: str) -> Dict[str, str]:
+def _extract_urls_from_text(value: str) -> List[str]:
+    found = re.findall(r'https?://[^\s"\'<>]+', value or "", flags=re.IGNORECASE)
+    urls: List[str] = []
+    for raw in found:
+        candidate = raw.rstrip(").,;]")
+        if is_trusted_source_url(candidate) and candidate not in urls:
+            urls.append(candidate)
+    return urls
+
+
+def _extract_candidate_urls_from_html(html: str) -> List[str]:
+    urls: List[str] = []
+
+    hrefs = re.findall(r'href=["\']([^"\']+)["\']', html or "", flags=re.IGNORECASE)
+    for href in hrefs:
+        candidate = href.strip()
+
+        if "duckduckgo.com/l/?" in candidate:
+            parsed = urlparse(candidate)
+            uddg = parse_qs(parsed.query).get("uddg", [""])[0]
+            candidate = unquote(uddg or "")
+
+        if candidate.startswith("//"):
+            candidate = f"https:{candidate}"
+
+        if is_trusted_source_url(candidate) and candidate not in urls:
+            urls.append(candidate)
+
+    for candidate in _extract_urls_from_text(html):
+        if candidate not in urls:
+            urls.append(candidate)
+
+    return urls
+
+
+def _parse_bing_rss(xml_text: str) -> List[str]:
+    urls: List[str] = []
+    links = re.findall(r"<link>(.*?)</link>", xml_text or "", flags=re.IGNORECASE | re.DOTALL)
+
+    for link in links:
+        candidate = link.strip()
+        if is_trusted_source_url(candidate) and candidate not in urls:
+            urls.append(candidate)
+
+    return urls
+
+
+def _search_bing_rss(query: str) -> List[str]:
     response = requests.get(
-        url,
-        headers={"User-Agent": "Continuum/1.0 (+trusted external doc generation)"},
-        timeout=30,
+        "https://www.bing.com/search",
+        params={"q": query, "format": "rss"},
+        headers={"User-Agent": SEARCH_USER_AGENT},
+        timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
+    return _parse_bing_rss(response.text)
+
+
+def _search_duckduckgo_html(query: str) -> List[str]:
+    response = requests.get(
+        "https://html.duckduckgo.com/html/",
+        params={"q": query},
+        headers={"User-Agent": SEARCH_USER_AGENT},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    return _extract_candidate_urls_from_html(response.text)
+
+
+def _score_discovered_url(url: str, topic: str, notes: str) -> int:
+    parsed = urlparse(url)
+    host = _normalize_host(parsed.netloc)
+    path = f"{parsed.path} {parsed.query}".lower()
+    text = f"{host} {path}"
+
+    topic_tokens = _tokenize(topic)
+    notes_tokens = _tokenize(notes)
+    all_tokens = set(topic_tokens + notes_tokens)
+
+    score = 0
+    for token in all_tokens:
+        if token in text:
+            score += 3
+
+    if "learn.microsoft.com" in host:
+        score += 4
+    elif "support.microsoft.com" in host:
+        score += 3
+    elif "support.google.com" in host:
+        score += 3
+    elif "support.apple.com" in host:
+        score += 3
+    elif "openai.com" in host:
+        score += 2
+
+    if any(word in path for word in ["how-to", "howto", "tutorial", "guide", "create", "set-up", "setup"]):
+        score += 2
+
+    return score
+
+
+def _discover_trusted_source_urls(topic: str, notes: str = "", limit: int = 4) -> List[str]:
+    query_core = " ".join(part for part in [topic.strip(), notes.strip()] if part).strip()
+    if not query_core:
+        return []
+
+    discovered: List[str] = []
+
+    query_variants = [
+        query_core,
+        f"how to {query_core}",
+        f"{query_core} official documentation",
+        f"{query_core} setup",
+    ]
+
+    # 1. General trusted-web search first
+    for query in query_variants:
+        for search_fn in (_search_bing_rss, _search_duckduckgo_html):
+            try:
+                for url in search_fn(query):
+                    if url not in discovered:
+                        discovered.append(url)
+            except Exception:
+                continue
+
+        if len(discovered) >= limit:
+            break
+
+    # 2. Host-targeted fallback if general search is not enough
+    if len(discovered) < limit:
+        for host in TRUSTED_HOSTS:
+            for query in query_variants:
+                site_query = f"{query} site:{host}"
+                for search_fn in (_search_bing_rss, _search_duckduckgo_html):
+                    try:
+                        for url in search_fn(site_query):
+                            if url not in discovered:
+                                discovered.append(url)
+                    except Exception:
+                        continue
+
+                if len(discovered) >= limit:
+                    break
+            if len(discovered) >= limit:
+                break
+
+    ranked = sorted(
+        discovered,
+        key=lambda url: _score_discovered_url(url, topic, notes),
+        reverse=True,
+    )
+
+    deduped: List[str] = []
+    seen = set()
+    for url in ranked:
+        if url in seen:
+            continue
+        seen.add(url)
+        deduped.append(url)
+        if len(deduped) >= limit:
+            break
+
+    return deduped
+
+
+def _resolve_source_urls(topic: str, notes: str, source_urls: List[str], target_count: int = 4) -> List[str]:
+    clean_urls: List[str] = []
+
+    for raw in source_urls:
+        url = str(raw or "").strip()
+        if not url:
+            continue
+        if not is_trusted_source_url(url):
+            raise ValueError(f"Only trusted source URLs are allowed: {url}")
+        if url not in clean_urls:
+            clean_urls.append(url)
+
+    if len(clean_urls) < target_count:
+        for discovered in _discover_trusted_source_urls(topic, notes, limit=target_count):
+            if discovered not in clean_urls:
+                clean_urls.append(discovered)
+            if len(clean_urls) >= target_count:
+                break
+
+    return clean_urls
+
+
+def _fetch_source(url: str) -> Optional[Dict[str, str]]:
+    try:
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Continuum/1.0 (+trusted external doc generation)"},
+            timeout=30,
+        )
+        response.raise_for_status()
+    except Exception:
+        return None
 
     content_type = (response.headers.get("content-type") or "").lower()
     raw = response.text or ""
@@ -90,6 +283,8 @@ def _fetch_source(url: str) -> Dict[str, str]:
         title = re.sub(r"\s+", " ", match.group(1)).strip()
 
     text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return None
 
     return {
         "url": url,
@@ -97,6 +292,17 @@ def _fetch_source(url: str) -> Dict[str, str]:
         "title": title or _normalize_host(urlparse(url).netloc),
         "content": text[:12000],
     }
+
+
+def _fetch_sources(urls: List[str]) -> List[Dict[str, str]]:
+    results: List[Dict[str, str]] = []
+
+    for url in urls:
+        source = _fetch_source(url)
+        if source:
+            results.append(source)
+
+    return results
 
 
 def _fallback_document(topic: str, doc_type: str, audience: str, notes: str, sources: List[Dict[str, str]]) -> Dict[str, str]:
@@ -196,23 +402,17 @@ Rules:
 
 
 def generate_external_document(topic: str, doc_type: str, audience: str, notes: str, source_urls: List[str]) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
-    clean_urls: List[str] = []
-
-    for raw in source_urls:
-        url = str(raw or "").strip()
-        if not url:
-            continue
-        if not is_trusted_source_url(url):
-            raise ValueError(f"Only trusted source URLs are allowed: {url}")
-        if url not in clean_urls:
-            clean_urls.append(url)
-
     if not topic.strip():
         raise ValueError("topic is required")
-    if not clean_urls:
-        raise ValueError("At least one trusted source URL is required")
 
-    sources = [_fetch_source(url) for url in clean_urls]
+    clean_urls = _resolve_source_urls(topic, notes, source_urls)
+    if not clean_urls:
+        raise ValueError("Could not find any trusted sources for that topic yet.")
+
+    sources = _fetch_sources(clean_urls)
+    if not sources:
+        raise ValueError("Trusted sources were found, but their pages could not be fetched.")
+
     document = _ai_document(
         topic=topic.strip(),
         doc_type=(doc_type or "sop").strip(),
@@ -268,9 +468,7 @@ def _fallback_external_answer(topic: str, question: str, selected: List[Dict[str
             "used_ai": False,
         }
 
-    lines = [
-        f"Based on the trusted external sources for **{topic}**:"
-    ]
+    lines = [f"Based on the trusted external sources for **{topic}**:"]
     for source in selected[:3]:
         snippet = source.get("content", "")[:320].strip()
         lines.append(f"- **{source['title']}**: {snippet}")
@@ -374,25 +572,19 @@ def answer_external_question(
     notes: str,
     source_urls: List[str],
 ) -> Dict[str, Any]:
-    clean_urls: List[str] = []
-
-    for raw in source_urls:
-        url = str(raw or "").strip()
-        if not url:
-            continue
-        if not is_trusted_source_url(url):
-            raise ValueError(f"Only trusted source URLs are allowed: {url}")
-        if url not in clean_urls:
-            clean_urls.append(url)
-
     if not topic.strip():
         raise ValueError("topic is required")
     if not question.strip():
         raise ValueError("question is required")
-    if not clean_urls:
-        raise ValueError("At least one trusted source URL is required")
 
-    fetched = [_fetch_source(url) for url in clean_urls]
+    clean_urls = _resolve_source_urls(topic, notes, source_urls)
+    if not clean_urls:
+        raise ValueError("Could not find any trusted sources for that topic yet.")
+
+    fetched = _fetch_sources(clean_urls)
+    if not fetched:
+        raise ValueError("Trusted sources were found, but their pages could not be fetched.")
+
     indexed = [
         {
             "id": f"external_source_{idx+1}",

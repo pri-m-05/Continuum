@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Continuum External Guide Studio</title>
+    <link rel="stylesheet" href="external_assist.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="pageHeader">
+        <div>
+          <div class="eyebrow">Trusted external guide studio</div>
+          <h1>Generate and ask about an external process</h1>
+          <div class="subtle">
+            Use trusted public documentation to explore a process, ask questions, and generate a draft guide.
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="card setupCard">
+          <h2>Guide setup</h2>
+
+          <label class="fieldLabel" for="topicInput">What do you need help with?</label>
+          <input id="topicInput" placeholder="Example: Create a SharePoint site" />
+
+          <div class="grid2">
+            <div>
+              <label class="fieldLabel" for="docTypeInput">Doc type</label>
+              <select id="docTypeInput">
+                <option value="sop">SOP</option>
+                <option value="walkthrough">Walkthrough</option>
+                <option value="training">Training</option>
+                <option value="audit">Audit</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="fieldLabel" for="audienceInput">Audience</label>
+              <select id="audienceInput">
+                <option value="team">Team</option>
+                <option value="new_hires">New hires</option>
+                <option value="auditors">Auditors</option>
+                <option value="admins">Admins</option>
+              </select>
+            </div>
+          </div>
+
+          <label class="fieldLabel" for="notesInput">Notes</label>
+          <textarea id="notesInput" rows="4" placeholder="Optional instructions or scope notes"></textarea>
+
+          <label class="fieldLabel" for="urlsInput">Trusted source URLs</label>
+          <textarea
+            id="urlsInput"
+            rows="8"
+            placeholder="Paste one trusted source URL per line&#10;https://learn.microsoft.com/...&#10;https://support.microsoft.com/..."
+          ></textarea>
+
+          <div class="setupActions">
+            <button id="generateDraftBtn">Generate Draft Guide</button>
+          </div>
+
+          <div id="setupStatus" class="subtle"></div>
+        </section>
+
+        <section class="card chatCard">
+          <div class="chatHeader">
+            <div>
+              <h2>Ask questions</h2>
+              <div class="subtle">Ask like a chat bot, but grounded only on the trusted sources you provide.</div>
+            </div>
+          </div>
+
+          <div id="chatLog" class="chatLog">
+            <div class="emptyState">Ask a question to start the external guide conversation.</div>
+          </div>
+
+          <div class="chatComposer">
+            <textarea
+              id="questionInput"
+              rows="4"
+              placeholder="Example: What are the main steps after choosing the SharePoint template?"
+            ></textarea>
+            <div class="chatActions">
+              <button id="askBtn">Ask</button>
+            </div>
+          </div>
+          <div id="chatStatus" class="subtle"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="react-dist/preview.js"></script>
+    <script src="external_assist.js"></script>
+  </body>
+</html>

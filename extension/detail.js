@@ -92,10 +92,18 @@ function renderDocumentView(doc) {
   document.getElementById("pageTitle").textContent = doc.title || "Untitled Document";
   document.getElementById("pageMeta").textContent = buildMeta(doc.created_at, doc.session_id);
   renderSourceBasis(doc);
+  const hasInternalFlow = !!(
+    doc.session_id ||
+    (Array.isArray(doc.source_session_ids) && doc.source_session_ids.length)
+  );
+
   document.getElementById("processIncludeStatus").textContent = "";
-  document.getElementById("includeInProcessBtn").classList.remove("hidden");
-  document.getElementById("includeInProcessBtn").textContent = "Include Doc Session";
-  document.getElementById("startGuideBtn").classList.remove("hidden");
+  document.getElementById("includeInProcessBtn").classList.toggle("hidden", !hasInternalFlow);
+  if (hasInternalFlow) {
+    document.getElementById("includeInProcessBtn").textContent = "Include Doc Session";
+  }
+  document.getElementById("startGuideBtn").classList.toggle("hidden", !hasInternalFlow);
+  document.getElementById("qaGuideBtn").classList.toggle("hidden", !hasInternalFlow);
 
   const summary = String(doc.summary || "").trim();
   const summaryCard = document.getElementById("summaryCard");
@@ -117,7 +125,7 @@ function renderDocumentView(doc) {
   document.getElementById("editState").classList.add("hidden");
 
   document.getElementById("editDocBtn").classList.remove("hidden");
-  document.getElementById("startGuideBtn").classList.remove("hidden");
+  document.getElementById("startGuideBtn").classList.toggle("hidden", !hasInternalFlow);
   document.getElementById("insertScreenshotBtn").classList.add("hidden");
   document.getElementById("saveDocBtn").classList.add("hidden");
   document.getElementById("cancelEditBtn").classList.add("hidden");
@@ -593,6 +601,16 @@ function escapeHtml(value) {
 }
 
 async function startGuidedRun() {
+  const hasInternalFlow = !!(
+    currentDoc?.session_id ||
+    (Array.isArray(currentDoc?.source_session_ids) && currentDoc.source_session_ids.length)
+  );
+
+  if (!hasInternalFlow) {
+    const status = document.getElementById("processIncludeStatus");
+    status.textContent = "Guided Run is only available for internally captured workflows.";
+    return;
+  }
   if (currentMode !== "docs" || !currentDoc) return;
 
   const status = document.getElementById("processIncludeStatus");

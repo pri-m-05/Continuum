@@ -71,3 +71,18 @@ class DocumentAskRequest(BaseModel):
     session_id: Optional[str] = None
     title: Optional[str] = None
     question: str
+
+class ExternalDocumentGenerateRequest(BaseModel):
+    topic: str
+    doc_type: str = "sop"
+    audience: str = "team"
+    notes: str = ""
+    source_urls: List[str] = Field(default_factory=list)
+
+class ExternalAssistAskRequest(BaseModel):
+    topic: str
+    question: str
+    doc_type: str = "sop"
+    audience: str = "team"
+    notes: str = ""
+    source_urls: List[str] = Field(default_factory=list)

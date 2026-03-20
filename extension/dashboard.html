@@ -14,13 +14,16 @@
 
       <section class="card">
         <div class="tabs">
-          <button id="tabDocs" class="tab active">Docs</button>
-          <button id="tabMeetings" class="tab">Meetings</button>
+            <button id="tabDocs" class="tab active">Docs</button>
+            <button id="tabMeetings" class="tab">Meetings</button>
         </div>
 
-        <input id="q" placeholder="Search..." />
-        <button id="searchBtn">Search</button>
-        <button id="refreshBtn" class="ghost">Recent</button>
+        <div class="toolbarRow">
+            <input id="q" placeholder="Search..." />
+            <button id="searchBtn">Search</button>
+            <button id="refreshBtn" class="ghost">Recent</button>
+            <button id="externalDocBtn" class="ghost">Generate from trusted sources</button>
+        </div>
       </section>
 
       <section class="card">
@@ -32,6 +35,62 @@
         <h2>Preview</h2>
         <div id="preview" class="list subtle">Select an item.</div>
       </section>
+    </div>
+
+    <div id="externalDocModal" class="modalBackdrop hidden">
+        <div class="modalCard">
+            <div class="modalHeader">
+            <div>
+                <h2>Generate doc from trusted sources</h2>
+                <div class="subtle">
+                Paste trusted source URLs from supported domains like Microsoft, Apple, Google, or OpenAI docs.
+                </div>
+            </div>
+            <button id="closeExternalDocModalBtn" class="ghost">Close</button>
+            </div>
+
+            <label class="fieldLabel" for="externalTopicInput">Process / topic</label>
+            <input id="externalTopicInput" placeholder="Example: Create a SharePoint site" />
+
+            <div class="modalGrid">
+            <div>
+                <label class="fieldLabel" for="externalDocTypeInput">Doc type</label>
+                <select id="externalDocTypeInput">
+                <option value="sop">SOP</option>
+                <option value="walkthrough">Walkthrough</option>
+                <option value="training">Training</option>
+                <option value="audit">Audit</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="fieldLabel" for="externalAudienceInput">Audience</label>
+                <select id="externalAudienceInput">
+                <option value="team">Team</option>
+                <option value="new_hires">New hires</option>
+                <option value="auditors">Auditors</option>
+                <option value="admins">Admins</option>
+                </select>
+            </div>
+            </div>
+
+            <label class="fieldLabel" for="externalNotesInput">Notes</label>
+            <textarea id="externalNotesInput" rows="4" placeholder="Optional instructions or scope notes"></textarea>
+
+            <label class="fieldLabel" for="externalUrlsInput">Trusted source URLs</label>
+            <textarea
+            id="externalUrlsInput"
+            rows="7"
+            placeholder="Paste one trusted source URL per line&#10;https://learn.microsoft.com/...&#10;https://support.microsoft.com/..."
+            ></textarea>
+
+            <div id="externalDocStatus" class="subtle"></div>
+
+            <div class="modalActions">
+            <button id="cancelExternalDocBtn" class="ghost">Cancel</button>
+            <button id="submitExternalDocBtn">Generate</button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="react-dist/preview.js"></script>

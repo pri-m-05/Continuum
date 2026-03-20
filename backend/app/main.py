@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import requests
+
 from dotenv import load_dotenv
 
 # Load backend/.env before importing services that read environment variables.
@@ -16,6 +18,8 @@ from app.models import (
     AutomationRequest,
     DocumentUpdateRequest,
     DocumentAskRequest,
+    ExternalAssistAskRequest,
+    ExternalDocumentGenerateRequest,
     GenerateRequest,
     IngestRequest,
     ProcessGenerateRequest,
@@ -26,6 +30,7 @@ from app.services.docs import actions_to_steps, dedupe_actions, generate_documen
 from app.services.meetings import get_ai_status, save_meeting_upload, transcribe_audio_file
 from app.services.notes import build_meeting_notes
 from app.services.qa import answer_document_question
+from app.services.external_docs import answer_external_question, generate_external_document
 from app.services.store import (
     ensure_store_exists,
     get_latest_document,
@@ -260,6 +265,63 @@ def generate_docs_for_process(payload: ProcessGenerateRequest):
         "steps": steps,
         "primary_document": saved_documents[0] if saved_documents else None,
         "options": saved_documents,
+        "audit": audit,
+    }
+
+@app.post("/external/ask")
+def external_ask(payload: ExternalAssistAskRequest):
+    try:
+        answer = answer_external_question(
+            topic=payload.topic,
+            question=payload.question,
+            doc_type=payload.doc_type,
+            audience=payload.audience,
+            notes=payload.notes,
+            source_urls=payload.source_urls,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not load one of the trusted sources: {exc}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"ok": True, "answer": answer}
+
+@app.post("/docs/generate-external")
+def generate_external_doc(payload: ExternalDocumentGenerateRequest):
+    try:
+        document, fetched_sources = generate_external_document(
+            topic=payload.topic,
+            doc_type=payload.doc_type,
+            audience=payload.audience,
+            notes=payload.notes,
+            source_urls=payload.source_urls,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except requests.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not load one of the trusted sources: {exc}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    audit = run_audit(document["content"], None)
+    saved = save_documents(
+        session_id="",
+        documents=[document],
+        audit=audit,
+        extra_fields={
+            "doc_type": payload.doc_type or "sop",
+            "source_basis": "trusted_external",
+            "trusted_source_urls": [src["url"] for src in fetched_sources],
+            "trusted_source_titles": [src["title"] for src in fetched_sources],
+        },
+    )
+
+    return {
+        "ok": True,
+        "primary_document": saved[0] if saved else None,
+        "sources": [{"title": src["title"], "url": src["url"], "host": src["host"]} for src in fetched_sources],
         "audit": audit,
     }
 

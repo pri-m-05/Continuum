@@ -25,10 +25,30 @@
 
       <section class="card topCard">
         <label for="backendBaseUrl" class="fieldLabel">Backend URL</label>
-        <input id="backendBaseUrl" type="text" placeholder="http://127.0.0.1:8000" />
+        <input id="backendBaseUrl" type="text" placeholder="https://continuum-61io.onrender.com/" />
       </section>
 
       <div class="settingsGrid">
+
+        <section class="card">
+            <h2>Beta account</h2>
+            <p class="subtle">Connect one lightweight beta account now so documents, screenshots, and meeting records can be tied to a user and plan later.</p>
+
+            <label for="accountName" class="fieldLabel">Name</label>
+            <input id="accountName" type="text" placeholder="Your name" />
+
+            <label for="accountEmail" class="fieldLabel">Email</label>
+            <input id="accountEmail" type="email" placeholder="you@example.com" />
+
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                <button id="connectAccountBtn" type="button">Connect Account</button>
+                <button id="refreshAccountBtn" type="button" class="ghost">Refresh Plan</button>
+            </div>
+
+            <p id="accountStatusText" class="subtle" style="margin-top:12px;">No beta account connected yet.</p>
+            <p id="accountUsageText" class="subtle"></p>
+        </section>
+
         <section class="card">
           <h2>Meeting minutes format</h2>
           <label for="meetingNotesStyle" class="fieldLabel">Format</label>

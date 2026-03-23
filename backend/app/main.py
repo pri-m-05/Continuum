@@ -1,9 +1,8 @@
 from __future__ import annotations
-
+import os
 from pathlib import Path
 
 import requests
-import os
 from dotenv import load_dotenv
 
 # Load backend/.env before importing services that read environment variables.
@@ -24,6 +23,7 @@ from app.models import (
     GenerateRequest,
     IngestRequest,
     ProcessGenerateRequest,
+    UserBootstrapRequest,
 )
 from app.services.audit import run_audit
 from app.services.automation import suggest_automation
@@ -55,6 +55,8 @@ from app.services.store import (
     get_sessions_by_ids,
     get_process_evidence_summary,
     list_screenshots_for_sessions,
+    get_user_status,
+    upsert_user,
 )
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 app = FastAPI(title="Continuum API", version="1.3.0")
@@ -79,6 +81,39 @@ def root():
 def health():
     return {"ok": True, "service": "continuum-api"}
 
+def _resolve_user_from_identity(identity) -> dict | None:
+    if not identity:
+        return None
+
+    payload = identity.model_dump() if hasattr(identity, "model_dump") else dict(identity)
+    email = str(payload.get("email", "")).strip()
+    name = str(payload.get("name", "")).strip()
+    user_id = str(payload.get("user_id", "")).strip()
+
+    if not email and not user_id:
+        return None
+
+    return upsert_user(email=email, name=name, user_id=user_id)
+
+
+@app.post("/users/bootstrap")
+def users_bootstrap(payload: UserBootstrapRequest):
+    email = str(payload.email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required.")
+
+    user = upsert_user(email=email, name=payload.name, user_id=payload.user_id)
+    status = get_user_status(user_id=user.get("user_id"))
+    return {"ok": True, "user": status}
+
+
+@app.get("/users/status")
+def users_status(user_id: str | None = None, email: str | None = None):
+    status = get_user_status(user_id=user_id, email=email)
+    if not status:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"ok": True, "user": status}
+
 @app.get("/config/status")
 def config_status():
     ai = get_ai_status()
@@ -96,11 +131,18 @@ def config_status():
 def ingest_actions(payload: IngestRequest):
     actions = [action.model_dump() for action in payload.actions]
     page = payload.page.model_dump()
+    user = _resolve_user_from_identity(payload.user)
 
     cleaned_actions = dedupe_actions(actions)
     steps = actions_to_steps(cleaned_actions, page)
 
-    upsert_session(session_id=payload.session_id, page=page, actions=cleaned_actions, steps=steps)
+    upsert_session(
+        session_id=payload.session_id,
+        page=page,
+        actions=cleaned_actions,
+        steps=steps,
+        user_id=(user or {}).get("user_id"),
+    )
 
     evidence = get_session_evidence_summary(payload.session_id)
 
@@ -186,6 +228,7 @@ def _build_guide_payload(document: dict[str, Any], backend_base_url: str) -> dic
 
 @app.post("/docs/generate")
 def generate_docs(payload: GenerateRequest):
+    user = _resolve_user_from_identity(payload.user)
     session = get_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -203,7 +246,10 @@ def generate_docs(payload: GenerateRequest):
         payload.session_id,
         primary,
         audit,
-        extra_fields={"doc_type": (intent or {}).get("doc_type", "sop")},
+        extra_fields={
+            "doc_type": (intent or {}).get("doc_type", "sop"),
+            "user_id": (user or {}).get("user_id") or session.get("user_id", ""),
+        },
     )
 
     return {
@@ -217,6 +263,7 @@ def generate_docs(payload: GenerateRequest):
 
 @app.post("/docs/generate-process")
 def generate_docs_for_process(payload: ProcessGenerateRequest):
+    user = _resolve_user_from_identity(payload.user)
     if not payload.session_ids:
         raise HTTPException(status_code=400, detail="At least one included session is required.")
 
@@ -256,6 +303,7 @@ def generate_docs_for_process(payload: ProcessGenerateRequest):
             "process_id": payload.process_id or "",
             "source_session_ids": payload.session_ids,
             "included_meeting_ids": payload.meeting_ids,
+            "user_id": (user or {}).get("user_id") or sessions[0].get("user_id", ""),
         },
     )
 
@@ -292,6 +340,7 @@ def external_ask(payload: ExternalAssistAskRequest):
 
 @app.post("/docs/generate-external")
 def generate_external_doc(payload: ExternalDocumentGenerateRequest):
+    user = _resolve_user_from_identity(payload.user)
     try:
         document, fetched_sources = generate_external_document(
             topic=payload.topic,
@@ -317,6 +366,7 @@ def generate_external_doc(payload: ExternalDocumentGenerateRequest):
             "source_basis": "trusted_external",
             "trusted_source_urls": [src["url"] for src in fetched_sources],
             "trusted_source_titles": [src["title"] for src in fetched_sources],
+            "user_id": (user or {}).get("user_id", ""),
         },
     )
 
@@ -455,6 +505,14 @@ def evidence_summary(session_id: str):
 
 @app.post("/sessions/screenshot")
 def sessions_screenshot(payload: dict):
+    user = None
+    if payload.get("user_email") or payload.get("user_id"):
+        user = upsert_user(
+            email=str(payload.get("user_email", "")).strip(),
+            name=str(payload.get("user_name", "")).strip(),
+            user_id=str(payload.get("user_id", "")).strip(),
+        )
+
     session_id = str(payload.get("session_id", "")).strip()
     page_url = str(payload.get("page_url", "")).strip()
     page_title = str(payload.get("page_title", "")).strip()
@@ -476,6 +534,7 @@ def sessions_screenshot(payload: dict):
         caption=caption,
         recommended=recommended,
         step_index=step_index,
+        user_id=(user or {}).get("user_id"),
     )
     return {"ok": True, "screenshot": screenshot}
 
@@ -515,8 +574,16 @@ async def meetings_upload(
     mic_ok: str = Form(default="false"),
     tab_level: str = Form(default="0"),
     mic_level: str = Form(default="0"),
+    duration_seconds: str = Form(default="0"),
+    user_id: str = Form(default=""),
+    user_email: str = Form(default=""),
+    user_name: str = Form(default=""),
     file: UploadFile = File(...),
 ):
+    user = None
+    if user_email or user_id:
+        user = upsert_user(email=user_email, name=user_name, user_id=user_id)
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded meeting file is empty.")
@@ -542,6 +609,8 @@ async def meetings_upload(
         mime_type=file.content_type or "audio/webm",
         transcript=transcript_text,
         notes=notes,
+        user_id=(user or {}).get("user_id"),
+        duration_seconds=int(float(duration_seconds or 0) or 0),
     )
 
     return {"ok": True, "meeting": meeting}

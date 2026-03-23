@@ -1,12 +1,19 @@
 const DEFAULT_SETTINGS = {
-  backendBaseUrl: "http://127.0.0.1:8000",
+  backendBaseUrl: "https://continuum-61io.onrender.com/",
   auditRules: {
     required_sections: ["Purpose", "Preconditions", "Procedure", "Controls", "Evidence"],
     required_keywords: [],
     prohibited_words: []
   },
   captureInputValues: false,
-  meetingNotesStyle: "professional_bullets"
+  meetingNotesStyle: "professional_bullets",
+  userAccount: {
+    user_id: "",
+    email: "",
+    name: "",
+    plan: "free",
+    usage: {}
+  }
 };
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -436,6 +443,7 @@ async function flushSession(sessionId) {
   if (!buffer?.actions?.length) return null;
 
   const intent = await getCaptureIntent(sessionId);
+  const user = await getConnectedUser();
 
   const result = await fetchJson(`${s.backendBaseUrl}/ingest-actions`, {
     method: "POST",
@@ -445,7 +453,8 @@ async function flushSession(sessionId) {
       page: buffer.page,
       actions: buffer.actions,
       rules: s.auditRules,
-      intent: intent || null
+      intent: intent || null,
+      user
     })
   });
 
@@ -466,6 +475,7 @@ async function generateDocsForCurrentProcess(payload) {
     }
 
     const s = await getSettings();
+    const user = await getConnectedUser();
     const result = await fetchJson(`${s.backendBaseUrl}/docs/generate-process`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -474,7 +484,8 @@ async function generateDocsForCurrentProcess(payload) {
         session_ids: sessionIds,
         meeting_ids: Array.isArray(process.includedMeetingIds) ? process.includedMeetingIds : [],
         rules: s.auditRules,
-        intent: process.intent
+        intent: process.intent,
+        user
       })
     });
 
@@ -499,11 +510,12 @@ async function generateDocsForSession(sessionId) {
   await flushSession(sessionId);
 
   const s = await getSettings();
-  const result = await fetchJson(`${s.backendBaseUrl}/docs/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent })
-  });
+    const user = await getConnectedUser();
+    const result = await fetchJson(`${s.backendBaseUrl}/docs/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent, user })
+    });
 
   const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
   lastResults[sessionId] = result;
@@ -529,20 +541,24 @@ async function captureScreenshotForActiveTab(payload) {
   }
 
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    const user = await getConnectedUser();
 
-  const result = await fetchJson(`${s.backendBaseUrl}/sessions/screenshot`, {
+    const result = await fetchJson(`${s.backendBaseUrl}/sessions/screenshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      session_id: sessionId,
-      page_url: tab.url || "",
-      page_title: tab.title || "",
-      data_url: dataUrl,
-      caption: payload?.caption || "",
-      recommended: !!payload?.recommended,
-      step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0
+        session_id: sessionId,
+        page_url: tab.url || "",
+        page_title: tab.title || "",
+        data_url: dataUrl,
+        caption: payload?.caption || "",
+        recommended: !!payload?.recommended,
+        step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0,
+        user_id: user?.user_id || "",
+        user_email: user?.email || "",
+        user_name: user?.name || ""
     })
-  });
+    });
 
   return { ok: true, screenshot: result.screenshot, sessionId };
 }
@@ -734,7 +750,7 @@ async function startMeetingCaptureForActiveTab(opts) {
     await ensureOffscreenDocument();
 
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
-
+    const user = await getConnectedUser();
     await sendToOffscreen("OFFSCREEN_START_RECORDING", {
       streamId,
       sessionId: sessionInfo.sessionId,
@@ -743,7 +759,8 @@ async function startMeetingCaptureForActiveTab(opts) {
       pageUrl: tab.url || "",
       pageTitle: tab.title || "",
       includeMic: true, // MIC ALWAYS
-      notesStyle: s.meetingNotesStyle || "professional_bullets"
+      notesStyle: s.meetingNotesStyle || "professional_bullets",
+      user,
     });
 
     const next = { status: "recording", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" };
@@ -915,7 +932,61 @@ async function getSettings() {
     auditRules: {
       ...DEFAULT_SETTINGS.auditRules,
       ...((r.continuum_settings || {}).auditRules || {})
+    },
+    userAccount: {
+      ...DEFAULT_SETTINGS.userAccount,
+      ...((r.continuum_settings || {}).userAccount || {})
     }
+  };
+}
+
+async function getConnectedUser() {
+  const s = await getSettings();
+  const account = s.userAccount || {};
+
+  if (!account.email && !account.user_id) return null;
+
+  if (account.user_id && account.plan) {
+    return {
+      user_id: account.user_id || "",
+      email: account.email || "",
+      name: account.name || ""
+    };
+  }
+
+  try {
+    const bootstrapped = await fetchJson(`${s.backendBaseUrl}/users/bootstrap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: account.email || "",
+        name: account.name || "",
+        user_id: account.user_id || ""
+      })
+    });
+
+    if (bootstrapped?.user) {
+      const mergedSettings = {
+        ...s,
+        userAccount: {
+          ...DEFAULT_SETTINGS.userAccount,
+          ...bootstrapped.user
+        }
+      };
+      await storageSet("sync", { continuum_settings: mergedSettings });
+
+      return {
+        user_id: mergedSettings.userAccount.user_id || "",
+        email: mergedSettings.userAccount.email || "",
+        name: mergedSettings.userAccount.name || ""
+      };
+    }
+  } catch (_) {}
+
+  return {
+    user_id: account.user_id || "",
+    email: account.email || "",
+    name: account.name || ""
   };
 }
 

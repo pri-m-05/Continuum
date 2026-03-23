@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <title>Continuum Detail</title>
     <link rel="stylesheet" href="detail.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
     <div class="page">
@@ -19,14 +21,21 @@
         </div>
         <div id="processIncludeStatus" class="subtle"></div>
         <div class="header-actions">
-          <button id="includeInProcessBtn" class="ghost hidden">Include in Process</button>
-          <button id="startGuideBtn" class="ghost hidden">Start Guided Run</button>
-          <button id="shareDocBtn" class="ghost hidden">Share</button>
-          <button id="editDocBtn" class="ghost hidden">Edit</button>
-          <button id="insertScreenshotBtn" class="ghost hidden">Insert Screenshot</button>
-          <button id="saveDocBtn" class="primary hidden">Save</button>
-          <button id="cancelEditBtn" class="ghost hidden">Cancel</button>
-          <button id="backToLibrary" class="ghost">Back to Library</button>
+            <button id="themeToggleBtn" class="ghost theme-toggle" data-theme-toggle></button>
+            <button id="includeInProcessBtn" class="ghost hidden">Include Doc Session</button>
+            <button id="startGuideBtn" class="ghost hidden">Start Guided Run</button>
+            <button id="shareDocBtn" class="ghost icon-btn hidden" title="Share document" aria-label="Share document">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"></path>
+                <path d="M12 16V3"></path>
+                <path d="M7 8l5-5 5 5"></path>
+                </svg>
+            </button>
+            <button id="editDocBtn" class="ghost hidden">Edit</button>
+            <button id="insertScreenshotBtn" class="ghost hidden">Insert Screenshot</button>
+            <button id="saveDocBtn" class="primary hidden">Save</button>
+            <button id="cancelEditBtn" class="ghost hidden">Cancel</button>
+            <button id="backToLibrary" class="ghost">Back to Library</button>
         </div>
       </header>
 
@@ -47,7 +56,7 @@
               </div>
               <button id="qaGuideBtn" class="ghost">Start Guided Run</button>
             </div>
-
+<
             <div class="qa-composer">
               <textarea
                 id="qaQuestionInput"
@@ -108,7 +117,7 @@
             <div class="eyebrow">Insert Screenshot</div>
             <h2 class="modal-title">Choose a screenshot from this session</h2>
           </div>
-          <button id="closeScreenshotModalBtn" class="ghost">Close</button>
+          <button id="closeScreenshotModalBtn" class="ghost icon-btn" title="Close" aria-label="Close">×</button>
         </div>
 
         <div id="screenshotPickerStatus" class="subtle modal-status">Loading screenshots...</div>
@@ -128,7 +137,7 @@
             <div class="eyebrow">Share document</div>
             <h2 class="modal-title">Export or prepare an email draft</h2>
           </div>
-          <button id="closeShareModalBtn" class="ghost">Close</button>
+          <button id="closeShareModalBtn" class="ghost icon-btn" title="Close" aria-label="Close">×</button>
         </div>
 
         <div class="subtle">

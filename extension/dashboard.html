@@ -4,12 +4,17 @@
     <meta charset="UTF-8" />
     <title>Continuum Library</title>
     <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
     <div class="wrap">
       <header class="header">
         <h1>Continuum Library</h1>
-        <div class="subtle" id="backendInfo">Loading settings...</div>
+        <div class="headerTools">
+            <div class="subtle" id="backendInfo">Loading settings...</div>
+            <button id="themeToggleBtn" class="ghost theme-toggle" data-theme-toggle></button>
+        </div>
       </header>
 
       <section class="card">

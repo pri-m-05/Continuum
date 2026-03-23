@@ -4,11 +4,24 @@
     <meta charset="UTF-8" />
     <title>Continuum</title>
     <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
     <div class="wrap">
-      <h1>Continuum</h1>
-      <p id="status">Checking backend...</p>
+      <header class="popupHeader">
+        <div class="popupTitleBlock">
+          <h1>Continuum</h1>
+          <p id="status" class="subtle">Checking backend...</p>
+        </div>
+
+        <button
+          id="themeToggleBtn"
+          class="ghost theme-toggle"
+          data-theme-toggle
+          type="button"
+        ></button>
+      </header>
 
       <section class="card">
         <h2>Workspace</h2>

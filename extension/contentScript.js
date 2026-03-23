@@ -39,10 +39,10 @@ let guideLastUrl = window.location.href;
 
       const element =
         event.target && event.target.closest
-          ? event.target.closest(
-              "button, a, input, select, textarea, [role='button'], label, div, span"
+            ? event.target.closest(
+                "button, a, input, select, textarea, [role='button'], label"
             )
-          : null;
+            : null;
 
       if (!element) return;
 
@@ -257,145 +257,158 @@ function ensureGuideUi() {
   guideRoot.id = "continuum-guide-root";
   guideRoot.innerHTML = `
     <style>
-      #continuum-guide-root {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 2147483646;
-        width: min(360px, calc(100vw - 32px));
-        font-family: Arial, sans-serif;
-        color: #18141f;
-      }
-      .continuum-guide-card {
-        background: rgba(255,255,255,0.98);
-        border: 1px solid #e7defb;
-        border-radius: 18px;
-        box-shadow: 0 16px 42px rgba(30, 23, 58, 0.2);
-        backdrop-filter: blur(12px);
-        overflow: hidden;
-      }
-      .continuum-guide-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 12px 14px 10px;
-        border-bottom: 1px solid #f0eafb;
-        cursor: move;
-      }
-      .continuum-guide-close {
-        border: none;
-        background: transparent;
-        width: 28px;
-        height: 28px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 18px;
-        color: #5b4a91;
-        flex: 0 0 auto;
-      }
-      .continuum-guide-close:hover {
-        background: #f5f0ff;
-      }
-      .continuum-guide-headcopy {
-        min-width: 0;
-      }
-      .continuum-guide-title {
-        font-size: 13px;
-        font-weight: 700;
-        color: #5b4a91;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin-bottom: 4px;
-      }
-      .continuum-guide-subtitle {
-        font-size: 14px;
-        font-weight: 700;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .continuum-guide-body {
-        padding: 14px;
-        display: grid;
-        gap: 12px;
-      }
-      .continuum-guide-step {
-        font-size: 12px;
-        color: #5f5a6b;
-      }
-      .continuum-guide-instruction {
-        font-size: 16px;
-        line-height: 1.45;
-        font-weight: 700;
-      }
-      .continuum-guide-status {
-        font-size: 13px;
-        line-height: 1.45;
-        color: #4d4561;
-        background: #f8f5ff;
-        border: 1px solid #eee7fb;
-        border-radius: 12px;
-        padding: 10px 12px;
-      }
-      .continuum-guide-status.warn {
-        background: #fff7eb;
-        border-color: #f3dbad;
-        color: #725000;
-      }
-      .continuum-guide-shot {
-        width: 100%;
-        display: none;
-        border-radius: 14px;
-        border: 1px solid #eee7fb;
-        max-height: 170px;
-        object-fit: cover;
-      }
-      .continuum-guide-shot.visible {
-        display: block;
-      }
-      .continuum-guide-actions {
-        display: flex;
-        gap: 8px;
-      }
-      .continuum-guide-actions button {
-        flex: 1 1 0;
-        border-radius: 12px;
-        padding: 10px 12px;
-        font-size: 13px;
-        cursor: pointer;
-        border: 1px solid #d9d0ef;
-        background: #fff;
-        color: #241f31;
-      }
-      .continuum-guide-actions button:hover {
-        background: #faf7ff;
-      }
-      #continuum-guide-highlight {
-        position: fixed;
-        z-index: 2147483644;
-        pointer-events: none;
-        border: 3px solid #7c3aed;
-        border-radius: 14px;
-        box-shadow: 0 0 0 7px rgba(124, 58, 237, 0.18);
-        animation: continuumGuidePulse 1.5s ease-in-out infinite;
-      }
-      #continuum-guide-arrow {
-        position: fixed;
-        z-index: 2147483645;
-        pointer-events: none;
-        background: #7c3aed;
-        color: white;
-        border-radius: 999px;
-        padding: 8px 12px;
-        font-size: 13px;
-        font-weight: 700;
-        box-shadow: 0 10px 24px rgba(124, 58, 237, 0.28);
-        white-space: nowrap;
-      }
-      @keyframes continuumGuidePulse {
-        0%, 100% { box-shadow: 0 0 0 7px rgba(124, 58, 237, 0.18); }
-        50% { box-shadow: 0 0 0 11px rgba(124, 58, 237, 0.10); }
-      }
+        #continuum-guide-root {
+            all: initial;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2147483646;
+            width: min(380px, calc(100vw - 32px));
+            font-family: Inter, Arial, sans-serif;
+            color: #18141f;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        #continuum-guide-root *,
+        #continuum-guide-highlight,
+        #continuum-guide-arrow {
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .continuum-guide-card {
+            display: block !important;
+            background: rgba(255,255,255,0.98);
+            border: 1px solid #e7defb;
+            border-radius: 18px;
+            box-shadow: 0 16px 42px rgba(30, 23, 58, 0.2);
+            backdrop-filter: blur(12px);
+            overflow: hidden;
+        }
+        .continuum-guide-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px 10px;
+            border-bottom: 1px solid #f0eafb;
+            cursor: move;
+        }
+        .continuum-guide-close {
+            appearance: none;
+            border: none;
+            background: transparent;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            color: #5b4a91;
+            flex: 0 0 auto;
+        }
+        .continuum-guide-close:hover {
+            background: #f5f0ff;
+        }
+        .continuum-guide-headcopy {
+            min-width: 0;
+        }
+        .continuum-guide-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #5b4a91;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 4px;
+        }
+        .continuum-guide-subtitle {
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .continuum-guide-body {
+            display: grid;
+            gap: 12px;
+            padding: 14px;
+        }
+        .continuum-guide-step {
+            font-size: 12px;
+            color: #5f5a6b;
+        }
+        .continuum-guide-instruction {
+            font-size: 16px;
+            line-height: 1.45;
+            font-weight: 700;
+        }
+        .continuum-guide-status {
+            font-size: 13px;
+            line-height: 1.45;
+            color: #4d4561;
+            background: #f8f5ff;
+            border: 1px solid #eee7fb;
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+        .continuum-guide-status.warn {
+            background: #fff7eb;
+            border-color: #f3dbad;
+            color: #725000;
+        }
+        .continuum-guide-shot {
+            width: 100%;
+            display: none;
+            border-radius: 14px;
+            border: 1px solid #eee7fb;
+            max-height: 170px;
+            object-fit: cover;
+        }
+        .continuum-guide-shot.visible {
+            display: block;
+        }
+        .continuum-guide-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .continuum-guide-actions button {
+            appearance: none;
+            flex: 1 1 0;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid #d9d0ef;
+            background: #fff;
+            color: #241f31;
+        }
+        .continuum-guide-actions button:hover {
+            background: #faf7ff;
+        }
+        #continuum-guide-highlight {
+            position: fixed;
+            z-index: 2147483644;
+            pointer-events: none;
+            border: 4px solid #7c3aed;
+            border-radius: 18px;
+            box-shadow: 0 0 0 11px rgba(124, 58, 237, 0.16);
+            animation: continuumGuidePulse 1.5s ease-in-out infinite;
+        }
+        #continuum-guide-arrow {
+            position: fixed;
+            z-index: 2147483645;
+            pointer-events: none;
+            background: #7c3aed;
+            color: white;
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(124, 58, 237, 0.28);
+            white-space: nowrap;
+        }
+        @keyframes continuumGuidePulse {
+            0%, 100% { box-shadow: 0 0 0 11px rgba(124, 58, 237, 0.16); }
+            50% { box-shadow: 0 0 0 15px rgba(124, 58, 237, 0.10); }
+        }
     </style>
     <div class="continuum-guide-card">
       <div class="continuum-guide-header" id="continuumGuideDragHandle">
@@ -533,28 +546,79 @@ function highlightCurrentGuideTarget(opts = {}) {
   renderGuideCard(currentGuideState, opts);
 }
 
+function isInteractiveGuideElement(element) {
+  if (!element) return false;
+  const tag = (element.tagName || "").toLowerCase();
+  if (["button", "a", "input", "select", "textarea", "label"].includes(tag)) return true;
+  const role = String(element.getAttribute?.("role") || "").toLowerCase();
+  return role === "button";
+}
+
+function isVisibleGuideElement(element) {
+  if (!element) return false;
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+}
+
 function findGuideTarget(step) {
   const selector = (step.target_selector || "").trim();
+  const label = normalizeGuideText(step.target_label || step.input_name || "");
+
   if (selector) {
     try {
       const direct = document.querySelector(selector);
-      if (direct) return direct;
+      if (direct && isVisibleGuideElement(direct) && isInteractiveGuideElement(direct)) {
+        return direct;
+      }
+
+      if (direct && label) {
+        const nested = Array.from(
+          direct.querySelectorAll("button, a, input, select, textarea, label, [role='button']")
+        ).filter(isVisibleGuideElement);
+
+        const nestedMatch = nested.find((candidate) => {
+          const candidateText = normalizeGuideText(getElementLabel(candidate));
+          return candidateText && (candidateText === label || candidateText.includes(label) || label.includes(candidateText));
+        });
+
+        if (nestedMatch) return nestedMatch;
+      }
+
+      if (direct && isVisibleGuideElement(direct)) {
+        return direct;
+      }
     } catch (_) {}
   }
 
-  const label = normalizeGuideText(step.target_label || step.input_name || "");
   if (!label) return null;
 
-  const candidates = Array.from(document.querySelectorAll("button, a, input, select, textarea, label, [role='button']"));
-  for (const candidate of candidates) {
-    const candidateText = normalizeGuideText(getElementLabel(candidate));
-    if (!candidateText) continue;
-    if (candidateText === label || candidateText.includes(label) || label.includes(candidateText)) {
-      return candidate;
-    }
-  }
+  const candidates = Array.from(
+    document.querySelectorAll("button, a, input, select, textarea, label, [role='button']")
+  ).filter(isVisibleGuideElement);
 
-  return null;
+  const scored = candidates
+    .map((candidate) => {
+      const candidateText = normalizeGuideText(getElementLabel(candidate));
+      if (!candidateText) return null;
+
+      let score = 0;
+      if (candidateText === label) score += 8;
+      else if (candidateText.includes(label) || label.includes(candidateText)) score += 4;
+
+      const tag = (candidate.tagName || "").toLowerCase();
+      if (step.action_kind === "change" && ["input", "select", "textarea"].includes(tag)) score += 2;
+      if (step.action_kind === "click" && ["button", "a", "label"].includes(tag)) score += 2;
+
+      const rect = candidate.getBoundingClientRect();
+      const area = rect.width * rect.height;
+
+      return score > 0 ? { candidate, score, area } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score || a.area - b.area);
+
+  return scored[0]?.candidate || null;
 }
 
 function normalizeGuideText(value) {
@@ -567,15 +631,19 @@ function normalizeGuideText(value) {
 function updateGuideHighlight(target) {
   if (!guideHighlight || !guideArrow) return;
   const rect = target.getBoundingClientRect();
+
+  const padX = 12;
+  const padY = 10;
+
   guideHighlight.style.display = "block";
-  guideHighlight.style.top = `${Math.max(6, rect.top - 6)}px`;
-  guideHighlight.style.left = `${Math.max(6, rect.left - 6)}px`;
-  guideHighlight.style.width = `${Math.max(20, rect.width + 12)}px`;
-  guideHighlight.style.height = `${Math.max(20, rect.height + 12)}px`;
+  guideHighlight.style.top = `${Math.max(6, rect.top - padY)}px`;
+  guideHighlight.style.left = `${Math.max(6, rect.left - padX)}px`;
+  guideHighlight.style.width = `${Math.max(36, rect.width + padX * 2)}px`;
+  guideHighlight.style.height = `${Math.max(36, rect.height + padY * 2)}px`;
 
   guideArrow.style.display = "block";
-  const arrowTop = Math.max(8, rect.top - 44);
-  const arrowLeft = Math.max(8, Math.min(window.innerWidth - 150, rect.left));
+  const arrowTop = Math.max(8, rect.top - 52);
+  const arrowLeft = Math.max(8, Math.min(window.innerWidth - 170, rect.left));
   guideArrow.style.top = `${arrowTop}px`;
   guideArrow.style.left = `${arrowLeft}px`;
 }

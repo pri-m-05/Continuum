@@ -1,34 +1,69 @@
-body {
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
-  width: 340px;
-  background: #f7f7f8;
-  color: #111;
+* {
+  box-sizing: border-box;
 }
 
-.wrap { padding: 12px; }
-h1 { margin: 0 0 8px; font-size: 20px; }
-h2 { margin: 0 0 8px; font-size: 14px; }
+body {
+  margin: 0;
+  padding: 0;
+  width: 380px;
+}
+
+.wrap {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.popupHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.popupTitleBlock {
+  min-width: 0;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
 
 .card {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  padding: 10px;
-  margin-bottom: 12px;
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
 }
 
 button {
   width: 100%;
-  margin-top: 6px;
-  border: none;
-  padding: 9px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  background: #111;
-  color: white;
+  min-height: 42px;
 }
 
-button:hover { opacity: 0.92; }
-.subtle { margin-top: 8px; color: #555; font-size: 12px; }
+.theme-toggle {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  padding: 0 !important;
+  flex: 0 0 40px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px !important;
+  line-height: 1 !important;
+}
+
+.subtle {
+  margin: 0;
+}

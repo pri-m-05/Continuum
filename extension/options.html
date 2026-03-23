@@ -4,59 +4,77 @@
     <meta charset="UTF-8" />
     <title>Continuum Options</title>
     <link rel="stylesheet" href="options.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
     <div class="wrap">
-      <h1>Continuum Options</h1>
+      <header class="optionsHeader">
+        <div class="optionsTitleBlock">
+          <h1>Continuum Options</h1>
+          <p class="subtle">Configure backend, documentation rules, and meeting behavior.</p>
+        </div>
 
-      <section class="card">
-        <label for="backendBaseUrl">Backend URL</label>
+        <button
+          id="themeToggleBtn"
+          class="ghost theme-toggle"
+          data-theme-toggle
+          type="button"
+        ></button>
+      </header>
+
+      <section class="card topCard">
+        <label for="backendBaseUrl" class="fieldLabel">Backend URL</label>
         <input id="backendBaseUrl" type="text" placeholder="http://127.0.0.1:8000" />
       </section>
 
-      <section class="card">
-        <h2>Meeting minutes format</h2>
-        <label for="meetingNotesStyle">Format</label>
-        <select id="meetingNotesStyle">
-          <option value="professional_bullets">Professional bullets</option>
-          <option value="narrative">Narrative paragraph</option>
-          <option value="action_items_only">Action items only</option>
-        </select>
-      </section>
+      <div class="settingsGrid">
+        <section class="card">
+          <h2>Meeting minutes format</h2>
+          <label for="meetingNotesStyle" class="fieldLabel">Format</label>
+          <select id="meetingNotesStyle">
+            <option value="professional_bullets">Professional bullets</option>
+            <option value="narrative">Narrative paragraph</option>
+            <option value="action_items_only">Action items only</option>
+          </select>
+        </section>
 
-      <section class="card">
-        <h2>Required Sections</h2>
-        <p>One per line.</p>
-        <textarea id="requiredSections"></textarea>
-      </section>
+        <section class="card">
+          <h2>AI / Meeting Status</h2>
+          <p id="aiStatusText" class="subtle">Checking backend AI configuration...</p>
+          <button id="refreshAiStatusBtn" type="button">Refresh AI Status</button>
+        </section>
 
-      <section class="card">
-        <h2>Required Keywords</h2>
-        <p>One per line.</p>
-        <textarea id="requiredKeywords"></textarea>
-      </section>
+        <section class="card">
+          <h2>Required Sections</h2>
+          <p class="subtle">One per line.</p>
+          <textarea id="requiredSections"></textarea>
+        </section>
 
-      <section class="card">
-        <h2>Prohibited Words</h2>
-        <p>One per line.</p>
-        <textarea id="prohibitedWords"></textarea>
-      </section>
+        <section class="card">
+          <h2>Required Keywords</h2>
+          <p class="subtle">One per line.</p>
+          <textarea id="requiredKeywords"></textarea>
+        </section>
 
-      <section class="card">
-        <label>
-          <input id="captureInputValues" type="checkbox" />
-          Capture safe input previews
-        </label>
-      </section>
+        <section class="card">
+          <h2>Prohibited Words</h2>
+          <p class="subtle">One per line.</p>
+          <textarea id="prohibitedWords"></textarea>
+        </section>
 
-      <section class="card">
-        <h2>AI / Meeting Status</h2>
-        <p id="aiStatusText">Checking backend AI configuration...</p>
-        <button id="refreshAiStatusBtn" type="button">Refresh AI Status</button>
-      </section>
+        <section class="card compactCard">
+          <label class="checkRow" for="captureInputValues">
+            <input id="captureInputValues" type="checkbox" />
+            <span>Capture safe input previews</span>
+          </label>
+        </section>
+      </div>
 
-      <button id="saveBtn">Save Settings</button>
-      <p id="status"></p>
+      <div class="saveBar">
+        <button id="saveBtn">Save Settings</button>
+        <p id="status" class="subtle"></p>
+      </div>
     </div>
 
     <script src="options.js"></script>

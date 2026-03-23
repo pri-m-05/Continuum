@@ -10,6 +10,7 @@ WHAT THIS FILE DOES
 
 from __future__ import annotations
 
+import os
 import base64
 import json
 import uuid
@@ -19,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 STORE_PATH = DATA_DIR / "store.json"
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"
 MEETINGS_DIR = DATA_DIR / "meetings"

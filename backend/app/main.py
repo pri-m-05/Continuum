@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import requests
-
+import os
 from dotenv import load_dotenv
 
 # Load backend/.env before importing services that read environment variables.
@@ -56,7 +56,7 @@ from app.services.store import (
     get_process_evidence_summary,
     list_screenshots_for_sessions,
 )
-
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 app = FastAPI(title="Continuum API", version="1.3.0")
 
 app.add_middleware(
@@ -345,7 +345,7 @@ def docs_guide(created_at: str | None = None, session_id: str | None = None, tit
     if not item:
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    guide = _build_guide_payload(item, backend_base_url="http://127.0.0.1:8000")
+    guide = _build_guide_payload(item, backend_base_url=PUBLIC_BASE_URL)
     return {"ok": True, "guide": guide}
 
 @app.post("/docs/ask")

@@ -56,6 +56,7 @@ from app.services.store import (
     get_process_evidence_summary,
     list_screenshots_for_sessions,
     get_user_status,
+    get_usage_limit_status,
     upsert_user,
 )
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -80,6 +81,32 @@ def root():
 @app.get("/health")
 def health():
     return {"ok": True, "service": "continuum-api"}
+
+USAGE_LIMIT_LABELS = {
+    "documents_generated": "documents",
+    "screenshots_saved": "screenshots",
+    "meetings_uploaded": "meetings",
+    "external_docs_generated": "external documents",
+}
+
+
+def _enforce_usage_limit(user_id: str | None, usage_key: str, amount: int = 1) -> None:
+    status = get_usage_limit_status(user_id=user_id, usage_key=usage_key, amount=amount)
+    if status.get("allowed"):
+        return
+
+    if status.get("reason") == "account_required":
+        raise HTTPException(status_code=401, detail="Connect a beta account before using this feature.")
+
+    label = USAGE_LIMIT_LABELS.get(usage_key, usage_key.replace("_", " "))
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            f"Free plan limit reached for {label}. "
+            f"You've used {status.get('current', 0)} of {status.get('limit', 0)}. "
+            f"Upgrade to continue."
+        ),
+    )
 
 def _resolve_user_from_identity(identity) -> dict | None:
     if not identity:
@@ -234,6 +261,8 @@ def generate_docs(payload: GenerateRequest):
         raise HTTPException(status_code=404, detail="Session not found.")
     page = session.get("page", {})
     steps = session.get("steps", [])
+    resolved_user_id = (user or {}).get("user_id") or session.get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "documents_generated")
     evidence = get_session_evidence_summary(payload.session_id)
     intent = payload.intent.model_dump() if payload.intent else None
 
@@ -273,6 +302,8 @@ def generate_docs_for_process(payload: ProcessGenerateRequest):
 
     intent = payload.intent.model_dump() if payload.intent else None
     primary_page = sessions[0].get("page", {})
+    resolved_user_id = (user or {}).get("user_id") or sessions[0].get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "documents_generated")
 
     steps = []
     for session in sessions:
@@ -341,6 +372,9 @@ def external_ask(payload: ExternalAssistAskRequest):
 @app.post("/docs/generate-external")
 def generate_external_doc(payload: ExternalDocumentGenerateRequest):
     user = _resolve_user_from_identity(payload.user)
+    resolved_user_id = (user or {}).get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "documents_generated")
+    _enforce_usage_limit(resolved_user_id, "external_docs_generated")
     try:
         document, fetched_sources = generate_external_document(
             topic=payload.topic,
@@ -526,6 +560,10 @@ def sessions_screenshot(payload: dict):
     if not data_url:
         raise HTTPException(status_code=400, detail="data_url is required.")
 
+    session = get_session(session_id)
+    resolved_user_id = (user or {}).get("user_id") or (session or {}).get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "screenshots_saved")
+
     screenshot = save_screenshot(
         session_id=session_id,
         page_url=page_url,
@@ -583,6 +621,10 @@ async def meetings_upload(
     user = None
     if user_email or user_id:
         user = upsert_user(email=user_email, name=user_name, user_id=user_id)
+
+    session = get_session(session_id)
+    resolved_user_id = (user or {}).get("user_id") or (session or {}).get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "meetings_uploaded")
 
     content = await file.read()
     if not content:

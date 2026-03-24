@@ -247,6 +247,73 @@ def get_user_status(user_id: Optional[str] = None, email: Optional[str] = None) 
     }
 
 
+def get_usage_limit_status(user_id: Optional[str], usage_key: str, amount: int = 1) -> Dict[str, Any]:
+    resolved_user_id = str(user_id or "").strip()
+    requested_amount = max(1, int(amount or 1))
+
+    if usage_key not in _blank_usage():
+        raise ValueError(f"Unknown usage key: {usage_key}")
+
+    if not resolved_user_id:
+        return {
+            "allowed": False,
+            "reason": "account_required",
+            "usage_key": usage_key,
+            "requested_amount": requested_amount,
+            "current": 0,
+            "limit": None,
+            "remaining": None,
+            "plan": "",
+            "user_id": "",
+        }
+
+    user = get_user(user_id=resolved_user_id)
+    if not user:
+        return {
+            "allowed": False,
+            "reason": "account_required",
+            "usage_key": usage_key,
+            "requested_amount": requested_amount,
+            "current": 0,
+            "limit": None,
+            "remaining": None,
+            "plan": "",
+            "user_id": resolved_user_id,
+        }
+
+    plan = str(user.get("plan") or "free").strip().lower()
+    usage = deepcopy(user.get("usage") or _blank_usage())
+    current = int(usage.get(usage_key, 0) or 0)
+    limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"]).get(usage_key)
+
+    if limit is None:
+        return {
+            "allowed": True,
+            "reason": "ok",
+            "usage_key": usage_key,
+            "requested_amount": requested_amount,
+            "current": current,
+            "limit": None,
+            "remaining": None,
+            "plan": plan,
+            "user_id": resolved_user_id,
+        }
+
+    remaining = max(0, int(limit) - current)
+    allowed = current + requested_amount <= int(limit)
+
+    return {
+        "allowed": allowed,
+        "reason": "ok" if allowed else "limit_reached",
+        "usage_key": usage_key,
+        "requested_amount": requested_amount,
+        "current": current,
+        "limit": int(limit),
+        "remaining": remaining,
+        "plan": plan,
+        "user_id": resolved_user_id,
+    }
+
 def _user_id_for_session(data: Dict[str, Any], session_id: str) -> str:
     session = data.get("sessions", {}).get(session_id) or {}
     return str(session.get("user_id") or "").strip()

@@ -16,6 +16,28 @@ const DEFAULT_SETTINGS = {
   }
 };
 
+const LOCAL_PLAN_LIMITS = {
+  free: {
+    documents_generated: 25,
+    screenshots_saved: 100,
+    meetings_uploaded: 10,
+    external_docs_generated: 10
+  },
+  paid: {
+    documents_generated: null,
+    screenshots_saved: null,
+    meetings_uploaded: null,
+    external_docs_generated: null
+  }
+};
+
+const USAGE_LIMIT_LABELS = {
+  documents_generated: "documents",
+  screenshots_saved: "screenshots",
+  meetings_uploaded: "meetings",
+  external_docs_generated: "external documents"
+};
+
 chrome.runtime.onInstalled.addListener(async () => {
   const existing = await storageGet("sync", "continuum_settings");
   if (!existing.continuum_settings) {
@@ -468,6 +490,9 @@ async function generateDocsForCurrentProcess(payload) {
   const process = await getCurrentProcess();
 
   if (process?.intent?.process_name && Array.isArray(process.includedSessions) && process.includedSessions.length) {
+    await syncConnectedUserStatus();
+    await enforceLocalUsageLimit("documents_generated");
+
     const sessionIds = process.includedSessions.map((item) => item.sessionId).filter(Boolean);
 
     for (const sessionId of sessionIds) {
@@ -494,6 +519,7 @@ async function generateDocsForCurrentProcess(payload) {
     const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
     if (sessionIds[0]) lastResults[sessionIds[0]] = result;
     await storageSet("local", { continuum_last_results: lastResults });
+
     await bumpStoredUsage({ documents_generated: 1 });
     await syncConnectedUserStatus(user);
     return result;
@@ -508,6 +534,8 @@ async function generateDocsForSession(sessionId) {
   const intent = await getCaptureIntent(sessionId);
   if (!intent?.process_name) throw new Error("Start a process first before generating a document.");
 
+  await syncConnectedUserStatus();
+  await enforceLocalUsageLimit("documents_generated");
   await flushSession(sessionId);
 
   const s = await getSettings();
@@ -529,6 +557,9 @@ async function generateDocsForSession(sessionId) {
 }
 
 async function captureScreenshotForActiveTab(payload) {
+  await syncConnectedUserStatus();
+  await enforceLocalUsageLimit("screenshots_saved");
+
   const s = await getSettings();
   const tab = await getActiveTab();
   if (!tab?.id) throw new Error("No active tab found.");
@@ -545,24 +576,25 @@ async function captureScreenshotForActiveTab(payload) {
   }
 
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
-    const user = await getConnectedUser();
+  const user = await getConnectedUser();
 
-    const result = await fetchJson(`${s.backendBaseUrl}/sessions/screenshot`, {
+  const result = await fetchJson(`${s.backendBaseUrl}/sessions/screenshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-        session_id: sessionId,
-        page_url: tab.url || "",
-        page_title: tab.title || "",
-        data_url: dataUrl,
-        caption: payload?.caption || "",
-        recommended: !!payload?.recommended,
-        step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0,
-        user_id: user?.user_id || "",
-        user_email: user?.email || "",
-        user_name: user?.name || ""
+      session_id: sessionId,
+      page_url: tab.url || "",
+      page_title: tab.title || "",
+      data_url: dataUrl,
+      caption: payload?.caption || "",
+      recommended: !!payload?.recommended,
+      step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0,
+      user_id: user?.user_id || "",
+      user_email: user?.email || "",
+      user_name: user?.name || ""
     })
-    });
+  });
+
   await bumpStoredUsage({ screenshots_saved: 1 });
   await syncConnectedUserStatus(user);
   return { ok: true, screenshot: result.screenshot, sessionId };
@@ -738,6 +770,9 @@ async function pingOffscreen() {
 }
 
 async function startMeetingCaptureForActiveTab(opts) {
+  await syncConnectedUserStatus();
+  await enforceLocalUsageLimit("meetings_uploaded");
+
   const state = (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
   if (state.status === "recording") return { ok: true, ...state };
 
@@ -748,7 +783,13 @@ async function startMeetingCaptureForActiveTab(opts) {
   const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
 
   await storageSet("local", {
-    continuum_meeting_state: { status: "arming", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" }
+    continuum_meeting_state: {
+      status: "arming",
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      lastError: ""
+    }
   });
 
   try {
@@ -756,6 +797,7 @@ async function startMeetingCaptureForActiveTab(opts) {
 
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
     const user = await getConnectedUser();
+
     await sendToOffscreen("OFFSCREEN_START_RECORDING", {
       streamId,
       sessionId: sessionInfo.sessionId,
@@ -763,18 +805,32 @@ async function startMeetingCaptureForActiveTab(opts) {
       backendBaseUrl: s.backendBaseUrl,
       pageUrl: tab.url || "",
       pageTitle: tab.title || "",
-      includeMic: true, // MIC ALWAYS
+      includeMic: true,
       notesStyle: s.meetingNotesStyle || "professional_bullets",
       user,
     });
 
-    const next = { status: "recording", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" };
+    const next = {
+      status: "recording",
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      lastError: ""
+    };
     await storageSet("local", { continuum_meeting_state: next });
     await chrome.action.setBadgeText({ text: "REC", tabId: tab.id });
     return { ok: true, ...next };
   } catch (error) {
     const msg = error?.message ? error.message : String(error);
-    await storageSet("local", { continuum_meeting_state: { status: "error", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: msg } });
+    await storageSet("local", {
+      continuum_meeting_state: {
+        status: "error",
+        sessionId: sessionInfo.sessionId,
+        tabId: tab.id,
+        startedAt: Date.now(),
+        lastError: msg
+      }
+    });
     throw error;
   }
 }
@@ -947,6 +1003,54 @@ async function getOrCreateSessionForTab(tabId, currentUrl) {
 function normalizeBaseUrl(value) {
   const trimmed = String(value || "").trim();
   return (trimmed || DEFAULT_SETTINGS.backendBaseUrl).replace(/\/+$/, "");
+}
+
+function getUsageSnapshot(account = {}) {
+  const plan = String(account.plan || "free").trim().toLowerCase();
+  const fallbackLimits = LOCAL_PLAN_LIMITS[plan] || LOCAL_PLAN_LIMITS.free;
+
+  return {
+    plan,
+    usage: {
+      documents_generated: Number(account?.usage?.documents_generated || 0),
+      screenshots_saved: Number(account?.usage?.screenshots_saved || 0),
+      meetings_uploaded: Number(account?.usage?.meetings_uploaded || 0),
+      meeting_minutes_processed: Number(account?.usage?.meeting_minutes_processed || 0),
+      external_docs_generated: Number(account?.usage?.external_docs_generated || 0)
+    },
+    limits: {
+      ...fallbackLimits,
+      ...(account?.limits || {})
+    }
+  };
+}
+
+async function enforceLocalUsageLimit(usageKey, amount = 1) {
+  const s = await getSettings();
+  const account = s.userAccount || {};
+
+  if (!account.user_id && !account.email) {
+    throw new Error("Connect a beta account before using this feature.");
+  }
+
+  const { usage, limits, plan } = getUsageSnapshot(account);
+  const limit = limits[usageKey];
+  const current = Number(usage[usageKey] || 0);
+  const requestedAmount = Math.max(1, Number(amount || 1));
+
+  if (limit == null) {
+    return { account, plan, current, limit: null };
+  }
+
+  if (current + requestedAmount > Number(limit)) {
+    const label = USAGE_LIMIT_LABELS[usageKey] || usageKey.replace(/_/g, " ");
+    const planLabel = plan === "paid" ? "Paid" : "Free";
+    throw new Error(
+      `${planLabel} plan limit reached for ${label}. You've used ${current} of ${limit}. Upgrade to continue.`
+    );
+  }
+
+  return { account, plan, current, limit: Number(limit) };
 }
 
 function mergeUsageCounts(existingUsage = {}, incomingUsage = {}) {

@@ -1,5 +1,5 @@
 const DEFAULT_SETTINGS = {
-  backendBaseUrl: "https://continuum-61io.onrender.com/",
+  backendBaseUrl: "https://continuum-61io.onrender.com",
   auditRules: {
     required_sections: ["Purpose", "Preconditions", "Procedure", "Controls", "Evidence"],
     required_keywords: [],
@@ -494,7 +494,8 @@ async function generateDocsForCurrentProcess(payload) {
     const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
     if (sessionIds[0]) lastResults[sessionIds[0]] = result;
     await storageSet("local", { continuum_last_results: lastResults });
-
+    await bumpStoredUsage({ documents_generated: 1 });
+    await syncConnectedUserStatus(user);
     return result;
   }
 
@@ -510,16 +511,19 @@ async function generateDocsForSession(sessionId) {
   await flushSession(sessionId);
 
   const s = await getSettings();
-    const user = await getConnectedUser();
-    const result = await fetchJson(`${s.backendBaseUrl}/docs/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent, user })
-    });
+  const user = await getConnectedUser();
+  const result = await fetchJson(`${s.backendBaseUrl}/docs/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent, user })
+  });
 
   const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
   lastResults[sessionId] = result;
   await storageSet("local", { continuum_last_results: lastResults });
+
+  await bumpStoredUsage({ documents_generated: 1 });
+  await syncConnectedUserStatus(user);
 
   return result;
 }
@@ -559,7 +563,8 @@ async function captureScreenshotForActiveTab(payload) {
         user_name: user?.name || ""
     })
     });
-
+  await bumpStoredUsage({ screenshots_saved: 1 });
+  await syncConnectedUserStatus(user);
   return { ok: true, screenshot: result.screenshot, sessionId };
 }
 
@@ -800,9 +805,24 @@ async function handleOffscreenMeetingComplete(payload) {
   if (payload?.meeting?.session_id) {
     latest[payload.meeting.session_id] = payload.meeting;
     await storageSet("local", { continuum_latest_meetings: latest });
-    await storageSet("local", { continuum_meeting_state: { status: "idle", sessionId: payload.meeting.session_id, lastCompletedAt: Date.now(), lastError: "" } });
+    await storageSet("local", {
+        continuum_meeting_state: {
+        status: "idle",
+        sessionId: payload.meeting.session_id,
+        lastCompletedAt: Date.now(),
+        lastError: ""
+        }
+    });
+
+    const durationSeconds = Number(payload?.meeting?.duration_seconds || 0);
+    await bumpStoredUsage({
+        meetings_uploaded: 1,
+        meeting_minutes_processed: durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : 0
+    });
+
+    await syncConnectedUserStatus();
     return;
-  }
+    }
 
   await storageSet("local", { continuum_meeting_state: { status: "error", sessionId: currentState.sessionId || null, lastCompletedAt: Date.now(), lastError: payload?.error || "Meeting finished without returning a record." } });
 }
@@ -924,9 +944,30 @@ async function getOrCreateSessionForTab(tabId, currentUrl) {
   return next;
 }
 
+function normalizeBaseUrl(value) {
+  const trimmed = String(value || "").trim();
+  return (trimmed || DEFAULT_SETTINGS.backendBaseUrl).replace(/\/+$/, "");
+}
+
+function mergeUsageCounts(existingUsage = {}, incomingUsage = {}) {
+  const keys = new Set([
+    ...Object.keys(existingUsage || {}),
+    ...Object.keys(incomingUsage || {})
+  ]);
+
+  const merged = {};
+  for (const key of keys) {
+    merged[key] = Math.max(
+      Number(existingUsage?.[key] || 0),
+      Number(incomingUsage?.[key] || 0)
+    );
+  }
+  return merged;
+}
+
 async function getSettings() {
   const r = await storageGet("sync", "continuum_settings");
-  return {
+  const merged = {
     ...DEFAULT_SETTINGS,
     ...(r.continuum_settings || {}),
     auditRules: {
@@ -938,47 +979,104 @@ async function getSettings() {
       ...((r.continuum_settings || {}).userAccount || {})
     }
   };
+
+  merged.backendBaseUrl = normalizeBaseUrl(merged.backendBaseUrl);
+  merged.userAccount.email = String(merged.userAccount.email || "").trim().toLowerCase();
+  merged.userAccount.name = String(merged.userAccount.name || "").trim();
+  return merged;
 }
 
-async function getConnectedUser() {
-  const s = await getSettings();
-  const account = s.userAccount || {};
+async function saveSettingsPatch(nextSettings) {
+  const current = await getSettings();
+  const nextUserAccount = (nextSettings || {}).userAccount || {};
 
-  if (!account.email && !account.user_id) return null;
+  const merged = {
+    ...current,
+    ...nextSettings,
+    backendBaseUrl: normalizeBaseUrl(nextSettings.backendBaseUrl || current.backendBaseUrl),
+    auditRules: {
+      ...current.auditRules,
+      ...((nextSettings || {}).auditRules || {})
+    },
+    userAccount: {
+      ...current.userAccount,
+      ...nextUserAccount,
+      usage: mergeUsageCounts(
+        current.userAccount?.usage || {},
+        nextUserAccount.usage || {}
+      )
+    }
+  };
 
-  if (account.user_id && account.plan) {
-    return {
-      user_id: account.user_id || "",
-      email: account.email || "",
-      name: account.name || ""
-    };
+  await storageSet("sync", { continuum_settings: merged });
+  return merged;
+}
+
+async function bumpStoredUsage(deltas = {}) {
+  const current = await getSettings();
+  const account = current.userAccount || {};
+
+  if (!account.user_id && !account.email) return current;
+
+  const nextUsage = { ...(account.usage || {}) };
+
+  for (const [key, delta] of Object.entries(deltas)) {
+    nextUsage[key] = Math.max(
+      0,
+      Number(nextUsage[key] || 0) + Number(delta || 0)
+    );
   }
 
-  try {
-    const bootstrapped = await fetchJson(`${s.backendBaseUrl}/users/bootstrap`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: account.email || "",
-        name: account.name || "",
-        user_id: account.user_id || ""
-      })
-    });
+  return await saveSettingsPatch({
+    userAccount: {
+      ...account,
+      usage: nextUsage
+    }
+  });
+}
 
-    if (bootstrapped?.user) {
-      const mergedSettings = {
-        ...s,
+async function syncConnectedUserStatus(preferredUser = null) {
+  const s = await getSettings();
+  const account = preferredUser || s.userAccount || {};
+
+  if (!account.user_id && !account.email) return null;
+
+  try {
+    let user = null;
+
+    if (account.email) {
+      const bootstrapped = await fetchJson(`${s.backendBaseUrl}/users/bootstrap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: account.email || "",
+          name: account.name || "",
+          user_id: account.user_id || ""
+        })
+      });
+      user = bootstrapped?.user || null;
+    } else if (account.user_id) {
+      const status = await fetchJson(
+        `${s.backendBaseUrl}/users/status?user_id=${encodeURIComponent(account.user_id)}`,
+        { method: "GET" }
+      );
+      user = status?.user || null;
+    }
+
+    if (user) {
+      await saveSettingsPatch({
         userAccount: {
-          ...DEFAULT_SETTINGS.userAccount,
-          ...bootstrapped.user
+          ...user,
+          email: user.email || account.email || "",
+          name: user.name || account.name || "",
+          usage: mergeUsageCounts(account.usage || {}, user.usage || {})
         }
-      };
-      await storageSet("sync", { continuum_settings: mergedSettings });
+      });
 
       return {
-        user_id: mergedSettings.userAccount.user_id || "",
-        email: mergedSettings.userAccount.email || "",
-        name: mergedSettings.userAccount.name || ""
+        user_id: user.user_id || "",
+        email: user.email || account.email || "",
+        name: user.name || account.name || ""
       };
     }
   } catch (_) {}
@@ -988,6 +1086,23 @@ async function getConnectedUser() {
     email: account.email || "",
     name: account.name || ""
   };
+}
+
+async function getConnectedUser() {
+  const s = await getSettings();
+  const account = s.userAccount || {};
+
+  if (!account.email && !account.user_id) return null;
+
+  if (account.user_id) {
+    return {
+      user_id: account.user_id || "",
+      email: account.email || "",
+      name: account.name || ""
+    };
+  }
+
+  return await syncConnectedUserStatus(account);
 }
 
 function fetchJson(url, options) {

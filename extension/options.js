@@ -1,5 +1,5 @@
 const DEFAULT_SETTINGS = {
-  backendBaseUrl: "http://127.0.0.1:8000",
+  backendBaseUrl: "https://continuum-61io.onrender.com",
   auditRules: {
     required_sections: ["Purpose", "Preconditions", "Procedure", "Controls", "Evidence"],
     required_keywords: [],
@@ -27,8 +27,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   await refreshAccountStatus();
 });
 
+function normalizeBaseUrl(value) {
+  const trimmed = String(value || "").trim();
+  return (trimmed || DEFAULT_SETTINGS.backendBaseUrl).replace(/\/+$/, "");
+}
+
 function mergeSettings(rawSettings) {
-  return {
+  const merged = {
     ...DEFAULT_SETTINGS,
     ...(rawSettings || {}),
     auditRules: {
@@ -40,6 +45,27 @@ function mergeSettings(rawSettings) {
       ...((rawSettings || {}).userAccount || {})
     }
   };
+
+  merged.backendBaseUrl = normalizeBaseUrl(merged.backendBaseUrl);
+  merged.userAccount.email = String(merged.userAccount.email || "").trim().toLowerCase();
+  merged.userAccount.name = String(merged.userAccount.name || "").trim();
+  return merged;
+}
+
+function mergeUsageCounts(existingUsage = {}, incomingUsage = {}) {
+  const keys = new Set([
+    ...Object.keys(existingUsage || {}),
+    ...Object.keys(incomingUsage || {})
+  ]);
+
+  const merged = {};
+  for (const key of keys) {
+    merged[key] = Math.max(
+      Number(existingUsage?.[key] || 0),
+      Number(incomingUsage?.[key] || 0)
+    );
+  }
+  return merged;
 }
 
 async function loadSettings() {
@@ -59,18 +85,19 @@ async function loadSettings() {
 
 async function saveSettings() {
   const existing = await getSavedSettings();
-  const backendBaseUrl = document.getElementById("backendBaseUrl").value.trim();
+  const backendBaseUrl = normalizeBaseUrl(document.getElementById("backendBaseUrl").value);
   const meetingNotesStyle = document.getElementById("meetingNotesStyle").value;
   const accountName = document.getElementById("accountName").value.trim();
-  const accountEmail = document.getElementById("accountEmail").value.trim();
+  const accountEmail = document.getElementById("accountEmail").value.trim().toLowerCase();
 
   const requiredSections = parseLines(document.getElementById("requiredSections").value);
   const requiredKeywords = parseLines(document.getElementById("requiredKeywords").value);
   const prohibitedWords = parseLines(document.getElementById("prohibitedWords").value);
   const captureInputValues = document.getElementById("captureInputValues").checked;
 
-  const settings = {
-    backendBaseUrl: backendBaseUrl || DEFAULT_SETTINGS.backendBaseUrl,
+  const settings = mergeSettings({
+    ...existing,
+    backendBaseUrl,
     meetingNotesStyle: meetingNotesStyle || "professional_bullets",
     captureInputValues,
     auditRules: {
@@ -79,12 +106,11 @@ async function saveSettings() {
       prohibited_words: prohibitedWords
     },
     userAccount: {
-      ...DEFAULT_SETTINGS.userAccount,
       ...(existing.userAccount || {}),
       name: accountName,
       email: accountEmail
     }
-  };
+  });
 
   await storageSet({ continuum_settings: settings });
   document.getElementById("status").textContent = "Settings saved.";
@@ -93,8 +119,8 @@ async function saveSettings() {
 }
 
 async function connectAccount() {
-  const backendBaseUrl = document.getElementById("backendBaseUrl").value.trim() || DEFAULT_SETTINGS.backendBaseUrl;
   const existing = await getSavedSettings();
+  const backendBaseUrl = normalizeBaseUrl(document.getElementById("backendBaseUrl").value);
   const name = document.getElementById("accountName").value.trim();
   const email = document.getElementById("accountEmail").value.trim().toLowerCase();
   const statusEl = document.getElementById("accountStatusText");
@@ -107,29 +133,26 @@ async function connectAccount() {
   statusEl.textContent = "Connecting beta account...";
 
   try {
-    const response = await fetch(`${backendBaseUrl}/users/bootstrap`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        name,
-        user_id: existing.userAccount?.user_id || ""
-      })
+    const user = await bootstrapAccount(backendBaseUrl, {
+      email,
+      name,
+      user_id: existing.userAccount?.user_id || ""
     });
 
-    const data = await response.json();
-    if (!response.ok || !data.user) throw new Error(data.detail || data.error || "Could not connect account.");
-
-    const settings = {
+    const settings = mergeSettings({
       ...existing,
       backendBaseUrl,
       userAccount: {
-        ...DEFAULT_SETTINGS.userAccount,
-        ...data.user
+        ...(existing.userAccount || {}),
+        ...user,
+        email,
+        name: user.name || name,
+        usage: mergeUsageCounts(existing.userAccount?.usage || {}, user.usage || {})
       }
-    };
+    });
 
     await storageSet({ continuum_settings: settings });
+    document.getElementById("backendBaseUrl").value = backendBaseUrl;
     document.getElementById("accountName").value = settings.userAccount.name || name;
     document.getElementById("accountEmail").value = settings.userAccount.email || email;
     renderAccountStatus(settings.userAccount);
@@ -141,7 +164,7 @@ async function connectAccount() {
 
 async function refreshAccountStatus() {
   const existing = await getSavedSettings();
-  const backendBaseUrl = document.getElementById("backendBaseUrl").value.trim() || DEFAULT_SETTINGS.backendBaseUrl;
+  const backendBaseUrl = normalizeBaseUrl(document.getElementById("backendBaseUrl").value);
   const account = existing.userAccount || DEFAULT_SETTINGS.userAccount;
 
   if (!account.user_id && !account.email) {
@@ -150,28 +173,61 @@ async function refreshAccountStatus() {
   }
 
   try {
-    const params = new URLSearchParams();
-    if (account.user_id) params.set("user_id", account.user_id);
-    else if (account.email) params.set("email", account.email);
+    let user = null;
 
-    const response = await fetch(`${backendBaseUrl}/users/status?${params.toString()}`);
-    const data = await response.json();
-    if (!response.ok || !data.user) throw new Error(data.detail || data.error || "Could not load account status.");
+    if (account.email) {
+      user = await bootstrapAccount(backendBaseUrl, account);
+    } else if (account.user_id) {
+      const response = await fetchJson(
+        `${backendBaseUrl}/users/status?user_id=${encodeURIComponent(account.user_id)}`
+      );
+      user = response.user || null;
+    }
 
-    const settings = {
+    if (!user) {
+      throw new Error("Could not load account status.");
+    }
+
+    const settings = mergeSettings({
       ...existing,
       backendBaseUrl,
       userAccount: {
-        ...DEFAULT_SETTINGS.userAccount,
-        ...data.user
+        ...(existing.userAccount || {}),
+        ...user,
+        email: user.email || account.email,
+        name: user.name || account.name,
+        usage: mergeUsageCounts(account.usage || {}, user.usage || {})
       }
-    };
+    });
 
     await storageSet({ continuum_settings: settings });
+    document.getElementById("backendBaseUrl").value = backendBaseUrl;
+    document.getElementById("accountName").value = settings.userAccount.name || "";
+    document.getElementById("accountEmail").value = settings.userAccount.email || "";
     renderAccountStatus(settings.userAccount);
   } catch (error) {
-    document.getElementById("accountStatusText").textContent = `Could not load beta account status: ${error.message}`;
+    renderAccountStatus(account);
+    document.getElementById("accountStatusText").textContent =
+      `${document.getElementById("accountStatusText").textContent} • Could not refresh from backend`;
   }
+}
+
+async function bootstrapAccount(backendBaseUrl, account) {
+  const response = await fetchJson(`${backendBaseUrl}/users/bootstrap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: String(account.email || "").trim().toLowerCase(),
+      name: String(account.name || "").trim(),
+      user_id: String(account.user_id || "").trim()
+    })
+  });
+
+  if (!response.user) {
+    throw new Error("Could not connect account.");
+  }
+
+  return response.user;
 }
 
 function renderAccountStatus(account) {
@@ -199,14 +255,11 @@ function renderAccountStatus(account) {
 
 async function refreshAiStatus() {
   const statusEl = document.getElementById("aiStatusText");
-  const backendBaseUrl = document.getElementById("backendBaseUrl").value.trim() || DEFAULT_SETTINGS.backendBaseUrl;
+  const backendBaseUrl = normalizeBaseUrl(document.getElementById("backendBaseUrl").value);
   statusEl.textContent = "Checking backend AI configuration...";
 
   try {
-    const response = await fetch(`${backendBaseUrl}/config/status`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
-
+    const data = await fetchJson(`${backendBaseUrl}/config/status`);
     statusEl.textContent = data.ai?.configured
       ? "OpenAI key detected on backend. Meeting transcription + notes enabled."
       : "OpenAI key NOT loaded on backend. Meetings can save, but transcript/notes disabled.";
@@ -222,6 +275,22 @@ async function getSavedSettings() {
 
 function parseLines(value) {
   return String(value || "").split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+function fetchJson(url, options = {}) {
+  return fetch(url, options).then(async (response) => {
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { raw: text };
+    }
+    if (!response.ok) {
+      throw new Error(data.detail || data.error || `Request failed: ${response.status}`);
+    }
+    return data;
+  });
 }
 
 function storageGet(key) { return new Promise((resolve) => chrome.storage.sync.get(key, resolve)); }

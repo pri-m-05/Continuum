@@ -28,9 +28,9 @@
         <input id="backendBaseUrl" type="text" placeholder="https://continuum-61io.onrender.com/" />
       </section>
 
-      <div class="settingsGrid">
+        <div class="settingsGrid">
 
-        <section class="card">
+        <section class="card accountCard">
             <h2>Beta account</h2>
             <p class="subtle">Connect one lightweight beta account now so documents, screenshots, and meeting records can be tied to a user and plan later.</p>
 
@@ -40,58 +40,58 @@
             <label for="accountEmail" class="fieldLabel">Email</label>
             <input id="accountEmail" type="email" placeholder="you@example.com" />
 
-            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+            <div class="accountActions">
                 <button id="connectAccountBtn" type="button">Connect Account</button>
                 <button id="refreshAccountBtn" type="button" class="ghost">Refresh Plan</button>
                 <button id="requestUpgradeBtn" type="button" class="ghost">Request Upgrade</button>
             </div>
 
-            <p id="accountStatusText" class="subtle" style="margin-top:12px;">No beta account connected yet.</p>
+            <p id="accountStatusText" class="subtle">No beta account connected yet.</p>
             <p id="accountUsageText" class="subtle"></p>
             <p id="accountLimitText" class="subtle"></p>
         </section>
 
-        <section class="card">
-          <h2>Meeting minutes format</h2>
-          <label for="meetingNotesStyle" class="fieldLabel">Format</label>
-          <select id="meetingNotesStyle">
+        <section class="card meetingCard">
+            <h2>Meeting minutes format</h2>
+            <label for="meetingNotesStyle" class="fieldLabel">Format</label>
+            <select id="meetingNotesStyle">
             <option value="professional_bullets">Professional bullets</option>
             <option value="narrative">Narrative paragraph</option>
             <option value="action_items_only">Action items only</option>
-          </select>
+            </select>
         </section>
 
-        <section class="card">
-          <h2>AI / Meeting Status</h2>
-          <p id="aiStatusText" class="subtle">Checking backend AI configuration...</p>
-          <button id="refreshAiStatusBtn" type="button">Refresh AI Status</button>
+        <section class="card statusCard">
+            <h2>AI / Meeting Status</h2>
+            <p id="aiStatusText" class="subtle">Checking backend AI configuration...</p>
+            <button id="refreshAiStatusBtn" type="button">Refresh AI Status</button>
         </section>
 
-        <section class="card">
-          <h2>Required Sections</h2>
-          <p class="subtle">One per line.</p>
-          <textarea id="requiredSections"></textarea>
+        <section class="card sectionsCard">
+            <h2>Required Sections</h2>
+            <p class="subtle">One per line.</p>
+            <textarea id="requiredSections"></textarea>
         </section>
 
-        <section class="card">
-          <h2>Required Keywords</h2>
-          <p class="subtle">One per line.</p>
-          <textarea id="requiredKeywords"></textarea>
+        <section class="card keywordsCard">
+            <h2>Required Keywords</h2>
+            <p class="subtle">One per line.</p>
+            <textarea id="requiredKeywords"></textarea>
         </section>
 
-        <section class="card">
-          <h2>Prohibited Words</h2>
-          <p class="subtle">One per line.</p>
-          <textarea id="prohibitedWords"></textarea>
+        <section class="card prohibitedCard">
+            <h2>Prohibited Words</h2>
+            <p class="subtle">One per line.</p>
+            <textarea id="prohibitedWords"></textarea>
         </section>
 
-        <section class="card compactCard">
-          <label class="checkRow" for="captureInputValues">
+        <section class="card compactCard captureCard">
+            <label class="checkRow" for="captureInputValues">
             <input id="captureInputValues" type="checkbox" />
             <span>Capture safe input previews</span>
-          </label>
+            </label>
         </section>
-      </div>
+        </div>
 
       <div class="saveBar">
         <button id="saveBtn">Save Settings</button>

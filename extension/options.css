@@ -4,12 +4,11 @@
 
 body {
   margin: 0;
-  padding: 28px 28px 40px;
+  padding: 24px 24px 32px;
 }
 
 .wrap {
-  width: min(1180px, calc(100vw - 56px));
-  max-width: none;
+  width: min(1160px, calc(100vw - 48px));
   margin: 0 auto;
   display: grid;
   gap: 18px;
@@ -35,8 +34,8 @@ h1 {
 }
 
 h2 {
-  margin: 0 0 10px;
-  font-size: 20px;
+  margin: 0 0 8px;
+  font-size: 18px;
   line-height: 1.2;
   letter-spacing: -0.015em;
 }
@@ -46,6 +45,8 @@ h2 {
   padding: 18px;
   display: grid;
   gap: 12px;
+  align-content: start;
+  min-width: 0;
 }
 
 .topCard {
@@ -55,18 +56,24 @@ h2 {
 
 .settingsGrid {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-areas:
+    "account meeting"
+    "account status"
+    "keywords sections"
+    "prohibited sections"
+    "capture capture";
+  gap: 18px;
   align-items: start;
 }
 
-.settingsGrid > .card {
-  min-width: 0;
-}
-
-.compactCard {
-  align-content: center;
-}
+.accountCard { grid-area: account; }
+.meetingCard { grid-area: meeting; }
+.statusCard { grid-area: status; }
+.sectionsCard { grid-area: sections; }
+.keywordsCard { grid-area: keywords; }
+.prohibitedCard { grid-area: prohibited; }
+.captureCard { grid-area: capture; }
 
 .fieldLabel {
   display: block;
@@ -82,7 +89,6 @@ input[type="email"],
 textarea,
 select {
   width: 100%;
-  box-sizing: border-box;
   min-height: 48px;
   padding: 12px 14px;
   border-radius: 14px;
@@ -90,7 +96,7 @@ select {
 }
 
 textarea {
-  min-height: 170px;
+  min-height: 200px;
   resize: vertical;
   line-height: 1.6;
 }
@@ -98,7 +104,49 @@ textarea {
 #requiredSections,
 #requiredKeywords,
 #prohibitedWords {
-  min-height: 170px;
+  min-height: 200px;
+}
+
+.accountActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.accountActions button {
+  min-height: 42px;
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding-inline: 14px;
+}
+
+#connectAccountBtn,
+#refreshAccountBtn,
+#requestUpgradeBtn,
+#refreshAiStatusBtn,
+#saveBtn {
+  min-height: 44px;
+}
+
+#refreshAiStatusBtn {
+  width: fit-content;
+  min-width: 220px;
+}
+
+#accountStatusText,
+#accountUsageText,
+#accountLimitText,
+#aiStatusText {
+  line-height: 1.7;
+  max-width: 76ch;
+  margin: 0;
+}
+
+.compactCard {
+  align-content: center;
 }
 
 .checkRow {
@@ -115,24 +163,11 @@ textarea {
   margin: 0;
 }
 
-#connectAccountBtn,
-#refreshAccountBtn,
-#requestUpgradeBtn {
-  min-height: 42px;
-}
-
-#accountStatusText,
-#accountUsageText,
-#accountLimitText {
-  line-height: 1.65;
-  max-width: 76ch;
-}
-
 .saveBar {
   display: grid;
   gap: 8px;
   align-items: start;
-  max-width: 420px;
+  max-width: 360px;
 }
 
 .saveBar button {
@@ -160,6 +195,14 @@ textarea {
 @media (max-width: 980px) {
   .settingsGrid {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "account"
+      "meeting"
+      "status"
+      "sections"
+      "keywords"
+      "prohibited"
+      "capture";
   }
 
   .optionsHeader {
@@ -173,5 +216,18 @@ textarea {
 
   body {
     padding: 16px 16px 28px;
+  }
+
+  .accountActions {
+    width: 100%;
+  }
+
+  .accountActions button {
+    flex: 1 1 160px;
+  }
+
+  #refreshAiStatusBtn {
+    width: 100%;
+    min-width: 0;
   }
 }

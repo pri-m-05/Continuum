@@ -131,6 +131,10 @@ textarea {
   box-shadow: none !important;
 }
 
+.accountBtn.isHidden {
+  display: none !important;
+}
+
 .accountBtnPrimary {
   min-width: 136px;
 }

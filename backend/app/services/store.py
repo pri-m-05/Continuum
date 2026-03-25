@@ -10,9 +10,10 @@ WHAT THIS FILE DOES
 
 from __future__ import annotations
 
-import os
 import base64
 import json
+import math
+import os
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -25,10 +26,34 @@ STORE_PATH = DATA_DIR / "store.json"
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"
 MEETINGS_DIR = DATA_DIR / "meetings"
 
+PLAN_LIMITS = {
+    "free": {
+        "documents_generated": 25,
+        "screenshots_saved": 100,
+        "meetings_uploaded": 10,
+        "external_docs_generated": 10,
+    },
+    "paid": {
+        "documents_generated": None,
+        "screenshots_saved": None,
+        "meetings_uploaded": None,
+        "external_docs_generated": None,
+    },
+}
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _blank_usage() -> Dict[str, int]:
+    return {
+        "sessions_created": 0,
+        "documents_generated": 0,
+        "screenshots_saved": 0,
+        "meetings_uploaded": 0,
+        "meeting_minutes_processed": 0,
+        "external_docs_generated": 0,
+    }
 
 def ensure_store_exists() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -38,7 +63,14 @@ def ensure_store_exists() -> None:
     if not STORE_PATH.exists():
         STORE_PATH.write_text(
             json.dumps(
-                {"sessions": {}, "documents": [], "workflows": [], "screenshots": [], "meetings": []},
+                {
+                    "sessions": {},
+                    "documents": [],
+                    "workflows": [],
+                    "screenshots": [],
+                    "meetings": [],
+                    "users": {},
+                },
                 indent=2,
             ),
             encoding="utf-8",
@@ -51,6 +83,7 @@ def _normalize_store(data: Dict[str, Any]) -> Dict[str, Any]:
     data.setdefault("workflows", [])
     data.setdefault("screenshots", [])
     data.setdefault("meetings", [])
+    data.setdefault("users", {})
     return data
 
 
@@ -64,11 +97,238 @@ def write_store(data: Dict[str, Any]) -> None:
     ensure_store_exists()
     STORE_PATH.write_text(json.dumps(_normalize_store(data), indent=2), encoding="utf-8")
 
+def _normalize_email(value: str) -> str:
+    return str(value or "").strip().lower()
 
-def upsert_session(session_id: str, page: Dict[str, Any], actions: List[Dict[str, Any]], steps: List[str]) -> Dict[str, Any]:
+
+def _normalize_user_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    item = deepcopy(record)
+    item["email"] = _normalize_email(item.get("email", ""))
+    item["name"] = str(item.get("name") or "").strip()
+    plan = str(item.get("plan") or "free").strip().lower()
+    item["plan"] = plan if plan in PLAN_LIMITS else "free"
+    usage = deepcopy(item.get("usage") or {})
+    for key, default_value in _blank_usage().items():
+        usage[key] = int(usage.get(key, default_value) or 0)
+    item["usage"] = usage
+    item.setdefault("created_at", _now_iso())
+    item.setdefault("updated_at", item["created_at"])
+    item.setdefault("last_seen_at", item["created_at"])
+    return item
+
+
+def upsert_user(email: str, name: str = "", user_id: str = "") -> Dict[str, Any]:
+    normalized_email = _normalize_email(email)
+    normalized_name = str(name or "").strip()
+    provided_user_id = str(user_id or "").strip()
+
+    if not normalized_email and not provided_user_id:
+        raise ValueError("email or user_id is required")
+
+    data = read_store()
+    users = data.get("users", {})
+
+    target_user_id = None
+    if provided_user_id and provided_user_id in users:
+        target_user_id = provided_user_id
+    elif normalized_email:
+        for existing_id, existing_user in users.items():
+            if _normalize_email(existing_user.get("email", "")) == normalized_email:
+                target_user_id = existing_id
+                break
+
+    if not target_user_id:
+        target_user_id = provided_user_id or f"user_{uuid.uuid4().hex}"
+        users[target_user_id] = {
+            "user_id": target_user_id,
+            "email": normalized_email,
+            "name": normalized_name,
+            "plan": "free",
+            "usage": _blank_usage(),
+            "created_at": _now_iso(),
+            "updated_at": _now_iso(),
+            "last_seen_at": _now_iso(),
+        }
+    else:
+        existing = _normalize_user_record(users[target_user_id])
+        if normalized_email:
+            existing["email"] = normalized_email
+        if normalized_name:
+            existing["name"] = normalized_name
+        existing["updated_at"] = _now_iso()
+        existing["last_seen_at"] = _now_iso()
+        users[target_user_id] = existing
+
+    data["users"] = users
+    write_store(data)
+    return _normalize_user_record(users[target_user_id])
+
+
+def get_user(user_id: Optional[str] = None, email: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    data = read_store()
+    users = data.get("users", {})
+
+    resolved_user_id = str(user_id or "").strip()
+    if resolved_user_id and resolved_user_id in users:
+        return _normalize_user_record(users[resolved_user_id])
+
+    normalized_email = _normalize_email(email or "")
+    if normalized_email:
+        for existing in users.values():
+            if _normalize_email(existing.get("email", "")) == normalized_email:
+                return _normalize_user_record(existing)
+
+    return None
+
+
+def set_user_plan(user_id: str, plan: str) -> Optional[Dict[str, Any]]:
+    normalized_plan = str(plan or "").strip().lower()
+    if normalized_plan not in PLAN_LIMITS:
+        raise ValueError("plan must be 'free' or 'paid'")
+
+    data = read_store()
+    users = data.get("users", {})
+    if user_id not in users:
+        return None
+
+    user = _normalize_user_record(users[user_id])
+    user["plan"] = normalized_plan
+    user["updated_at"] = _now_iso()
+    user["last_seen_at"] = _now_iso()
+    users[user_id] = user
+    data["users"] = users
+    write_store(data)
+    return user
+
+
+def increment_user_usage(user_id: Optional[str], **deltas: int) -> Optional[Dict[str, Any]]:
+    resolved_user_id = str(user_id or "").strip()
+    if not resolved_user_id:
+        return None
+
+    data = read_store()
+    users = data.get("users", {})
+    if resolved_user_id not in users:
+        return None
+
+    user = _normalize_user_record(users[resolved_user_id])
+    usage = user.get("usage", _blank_usage())
+
+    for key, delta in deltas.items():
+        if key not in usage:
+            usage[key] = 0
+        usage[key] = max(0, int(usage.get(key, 0) or 0) + int(delta or 0))
+
+    user["usage"] = usage
+    user["updated_at"] = _now_iso()
+    user["last_seen_at"] = _now_iso()
+    users[resolved_user_id] = user
+    data["users"] = users
+    write_store(data)
+    return user
+
+
+def get_user_status(user_id: Optional[str] = None, email: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    user = get_user(user_id=user_id, email=email)
+    if not user:
+        return None
+
+    plan = user.get("plan", "free")
+    return {
+        "user_id": user.get("user_id", ""),
+        "email": user.get("email", ""),
+        "name": user.get("name", ""),
+        "plan": plan,
+        "usage": deepcopy(user.get("usage") or _blank_usage()),
+        "limits": deepcopy(PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])),
+        "created_at": user.get("created_at", ""),
+        "updated_at": user.get("updated_at", ""),
+        "last_seen_at": user.get("last_seen_at", ""),
+    }
+
+
+def get_usage_limit_status(user_id: Optional[str], usage_key: str, amount: int = 1) -> Dict[str, Any]:
+    resolved_user_id = str(user_id or "").strip()
+    requested_amount = max(1, int(amount or 1))
+
+    if usage_key not in _blank_usage():
+        raise ValueError(f"Unknown usage key: {usage_key}")
+
+    if not resolved_user_id:
+        return {
+            "allowed": False,
+            "reason": "account_required",
+            "usage_key": usage_key,
+            "requested_amount": requested_amount,
+            "current": 0,
+            "limit": None,
+            "remaining": None,
+            "plan": "",
+            "user_id": "",
+        }
+
+    user = get_user(user_id=resolved_user_id)
+    if not user:
+        return {
+            "allowed": False,
+            "reason": "account_required",
+            "usage_key": usage_key,
+            "requested_amount": requested_amount,
+            "current": 0,
+            "limit": None,
+            "remaining": None,
+            "plan": "",
+            "user_id": resolved_user_id,
+        }
+
+    plan = str(user.get("plan") or "free").strip().lower()
+    usage = deepcopy(user.get("usage") or _blank_usage())
+    current = int(usage.get(usage_key, 0) or 0)
+    limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"]).get(usage_key)
+
+    if limit is None:
+        return {
+            "allowed": True,
+            "reason": "ok",
+            "usage_key": usage_key,
+            "requested_amount": requested_amount,
+            "current": current,
+            "limit": None,
+            "remaining": None,
+            "plan": plan,
+            "user_id": resolved_user_id,
+        }
+
+    remaining = max(0, int(limit) - current)
+    allowed = current + requested_amount <= int(limit)
+
+    return {
+        "allowed": allowed,
+        "reason": "ok" if allowed else "limit_reached",
+        "usage_key": usage_key,
+        "requested_amount": requested_amount,
+        "current": current,
+        "limit": int(limit),
+        "remaining": remaining,
+        "plan": plan,
+        "user_id": resolved_user_id,
+    }
+
+def _user_id_for_session(data: Dict[str, Any], session_id: str) -> str:
+    session = data.get("sessions", {}).get(session_id) or {}
+    return str(session.get("user_id") or "").strip()
+
+def upsert_session(
+    session_id: str,
+    page: Dict[str, Any],
+    actions: List[Dict[str, Any]],
+    steps: List[str],
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     data = read_store()
     sessions = data.get("sessions", {})
     existing = sessions.get(session_id)
+    was_created = existing is None
 
     if not existing:
         existing = {
@@ -78,16 +338,23 @@ def upsert_session(session_id: str, page: Dict[str, Any], actions: List[Dict[str
             "steps": [],
             "created_at": _now_iso(),
             "updated_at": _now_iso(),
+            "user_id": str(user_id or "").strip(),
         }
 
     existing["page"] = page
     existing["actions"].extend(deepcopy(actions))
     existing["steps"] = deepcopy(steps)
     existing["updated_at"] = _now_iso()
+    if user_id:
+        existing["user_id"] = str(user_id).strip()
 
     sessions[session_id] = existing
     data["sessions"] = sessions
     write_store(data)
+
+    if was_created and user_id:
+        increment_user_usage(user_id, sessions_created=1)
+
     return existing
 
 def _source_meta_for_basis(source_basis: str) -> Dict[str, str]:
@@ -150,6 +417,8 @@ def save_documents(
     existing_documents = data.get("documents", [])
     saved = []
 
+    session_user_id = _user_id_for_session(data, session_id) if session_id else ""
+
     for doc in documents:
         record = deepcopy(doc)
         record["session_id"] = session_id
@@ -157,12 +426,22 @@ def save_documents(
         record["created_at"] = _now_iso()
         if extra_fields:
             record.update(deepcopy(extra_fields))
+        if not record.get("user_id") and session_user_id:
+            record["user_id"] = session_user_id
         record = _normalize_document_source(record)
         existing_documents.append(record)
         saved.append(record)
 
     data["documents"] = existing_documents
     write_store(data)
+
+    for item in saved:
+        resolved_user_id = str(item.get("user_id") or session_user_id or "").strip()
+        deltas = {"documents_generated": 1}
+        if item.get("source_basis") == "trusted_external":
+            deltas["external_docs_generated"] = 1
+        increment_user_usage(resolved_user_id, **deltas)
+
     return saved
 
 def get_latest_document(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -267,17 +546,25 @@ def update_document_item(
 def search_documents(query: str) -> List[Dict[str, Any]]:
     data = read_store()
     documents = data.get("documents", [])
-    q = query.strip().lower()
-
+    q = str(query or "").strip().lower()
     if not q:
-        return sorted(documents, key=lambda item: item.get("created_at", ""), reverse=True)[:10]
+        docs = sorted(documents, key=lambda item: item.get("created_at", ""), reverse=True)
+        return [_normalize_document_source(item) for item in docs[:20]]
 
     terms = [term for term in q.split() if term]
     scored = []
 
     for doc in documents:
         haystack = " ".join(
-            [str(doc.get("title", "")), str(doc.get("summary", "")), str(doc.get("content", ""))]
+            [
+                str(doc.get("title", "")),
+                str(doc.get("summary", "")),
+                str(doc.get("content", "")),
+                str(doc.get("session_id", "")),
+                str(doc.get("doc_type", "")),
+                str(doc.get("source_label", "")),
+                str(doc.get("source_note", "")),
+            ]
         ).lower()
         score = 0
         for term in terms:
@@ -288,7 +575,6 @@ def search_documents(query: str) -> List[Dict[str, Any]]:
     scored.sort(key=lambda item: item[0], reverse=True)
     return [_normalize_document_source(item[1]) for item in scored[:20]]
 
-
 def save_screenshot(
     session_id: str,
     page_url: str,
@@ -297,6 +583,7 @@ def save_screenshot(
     caption: str = "",
     recommended: bool = False,
     step_index: int = 0,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     ensure_store_exists()
 
@@ -310,9 +597,13 @@ def save_screenshot(
     file_path = SCREENSHOTS_DIR / f"{screenshot_id}.png"
     file_path.write_bytes(raw)
 
+    data = read_store()
+    resolved_user_id = str(user_id or _user_id_for_session(data, session_id) or "").strip()
+
     record = {
         "screenshot_id": screenshot_id,
         "session_id": session_id,
+        "user_id": resolved_user_id,
         "page_url": page_url,
         "page_title": page_title,
         "caption": caption,
@@ -323,11 +614,12 @@ def save_screenshot(
         "created_at": _now_iso(),
     }
 
-    data = read_store()
     screenshots = data.get("screenshots", [])
     screenshots.append(record)
     data["screenshots"] = screenshots
     write_store(data)
+
+    increment_user_usage(resolved_user_id, screenshots_saved=1)
     return record
 
 
@@ -379,13 +671,17 @@ def save_meeting_record(
     mime_type: str,
     transcript: str,
     notes: Dict[str, Any],
+    user_id: Optional[str] = None,
+    duration_seconds: int = 0,
 ) -> Dict[str, Any]:
     data = read_store()
     meetings = data.get("meetings", [])
+    resolved_user_id = str(user_id or _user_id_for_session(data, session_id) or "").strip()
 
     record = {
         "meeting_id": f"meeting_{uuid.uuid4().hex}",
         "session_id": session_id,
+        "user_id": resolved_user_id,
         "tab_id": tab_id,
         "page_url": page_url,
         "page_title": page_title,
@@ -394,12 +690,18 @@ def save_meeting_record(
         "mime_type": mime_type,
         "transcript": transcript,
         "notes": notes,
+        "duration_seconds": int(duration_seconds or 0),
         "created_at": _now_iso(),
     }
 
     meetings.append(record)
     data["meetings"] = meetings
     write_store(data)
+
+    usage_deltas = {"meetings_uploaded": 1}
+    if duration_seconds:
+        usage_deltas["meeting_minutes_processed"] = int(math.ceil(max(0, duration_seconds) / 60))
+    increment_user_usage(resolved_user_id, **usage_deltas)
     return record
 
 
@@ -439,19 +741,29 @@ def get_session_evidence_summary(session_id: str) -> Dict[str, Any]:
         latest_meeting = sorted(meetings, key=lambda item: item.get("created_at", ""), reverse=True)[0]
 
     excerpt = ""
-    if latest_meeting and latest_meeting.get("transcript"):
-        excerpt = latest_meeting["transcript"][:240]
+    if latest_meeting:
+        notes = latest_meeting.get("notes", {}) or {}
+        excerpt = str(notes.get("summary") or latest_meeting.get("transcript") or "").strip()[:400]
+
+    latest_screenshot = None
+    if screenshots:
+        latest_screenshot = sorted(screenshots, key=lambda item: item.get("created_at", ""), reverse=True)[0]
 
     return {
+        "session_id": session_id,
         "screenshot_count": len(screenshots),
         "meeting_count": len(meetings),
+        "latest_screenshot": latest_screenshot,
+        "latest_meeting": latest_meeting,
         "latest_meeting_excerpt": excerpt,
     }
 
-def get_meeting_item(meeting_id: Optional[str] = None, created_at: Optional[str] = None, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    data = read_store()
-    meetings = sorted(data.get("meetings", []), key=lambda item: item.get("created_at", ""), reverse=True)
-
+def get_meeting_item(
+    meeting_id: Optional[str] = None,
+    created_at: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    meetings = list_meetings()
     for meeting in meetings:
         if meeting_id and meeting.get("meeting_id") != meeting_id:
             continue
@@ -460,39 +772,43 @@ def get_meeting_item(meeting_id: Optional[str] = None, created_at: Optional[str]
         if session_id and meeting.get("session_id") != session_id:
             continue
         return meeting
-
     return None
 
 # Added for Library support (Meetings tab)
 def list_meetings() -> List[Dict[str, Any]]:
     data = read_store()
     meetings = data.get("meetings", [])
-    return sorted(meetings, key=lambda m: m.get("created_at", ""), reverse=True)
+    return sorted(meetings, key=lambda item: item.get("created_at", ""), reverse=True)
 
 
 def search_meetings(query: str) -> List[Dict[str, Any]]:
     data = read_store()
     meetings = data.get("meetings", [])
-    q = (query or "").strip().lower()
+    q = str(query or "").strip().lower()
     if not q:
-        return sorted(meetings, key=lambda m: m.get("created_at", ""), reverse=True)[:50]
+        return sorted(meetings, key=lambda item: item.get("created_at", ""), reverse=True)[:20]
 
-    terms = [t for t in q.split() if t]
-    scored: List[tuple[int, Dict[str, Any]]] = []
-    for m in meetings:
-        notes = m.get("notes") or {}
-        hay = " ".join([
-            str(m.get("page_title", "")),
-            str(m.get("page_url", "")),
-            str(notes.get("summary", "")),
-            str(notes.get("minutes_markdown", "")),
-            str(m.get("transcript", "")),
-        ]).lower()
+    terms = [term for term in q.split() if term]
+    scored = []
+
+    for meeting in meetings:
+        notes = meeting.get("notes", {}) or {}
+        haystack = " ".join(
+            [
+                str(meeting.get("page_title", "")),
+                str(meeting.get("page_url", "")),
+                str(meeting.get("session_id", "")),
+                str(meeting.get("transcript", "")),
+                str(notes.get("summary", "")),
+                str(notes.get("minutes", "")),
+                str(notes.get("action_items", "")),
+            ]
+        ).lower()
         score = 0
         for term in terms:
-            score += hay.count(term)
+            score += haystack.count(term)
         if score > 0:
-            scored.append((score, m))
+            scored.append((score, meeting))
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [x[1] for x in scored[:50]]
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [item[1] for item in scored[:20]]

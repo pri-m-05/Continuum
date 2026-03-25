@@ -7,8 +7,11 @@ let activeTabId = null;
 let activeBackendBaseUrl = null;
 let activePageUrl = "";
 let activePageTitle = "";
+
 let activeMimeType = "audio/webm";
 let activeNotesStyle = "professional_bullets";
+let activeUser = null;
+let recordingStartedAt = 0;
 
 (async function boot() {
   try {
@@ -64,6 +67,8 @@ async function startRecording(payload) {
   activePageUrl = payload.pageUrl || "";
   activePageTitle = payload.pageTitle || "";
   activeNotesStyle = payload.notesStyle || "professional_bullets";
+  activeUser = payload.user || null;
+  recordingStartedAt = Date.now();
 
   // TAB OUTPUT (what you hear)
   tabStream = await navigator.mediaDevices.getUserMedia({
@@ -189,6 +194,10 @@ async function finalizeAndUploadRecording(meta) {
   formData.append("tab_level", String(meta?.tabLevel || 0));
   formData.append("mic_level", String(meta?.micLevel || 0));
   formData.append("notes_style", String(activeNotesStyle || "professional_bullets"));
+  formData.append("duration_seconds", String(Math.max(0, Math.round((Date.now() - recordingStartedAt) / 1000))));
+  formData.append("user_id", String(activeUser?.user_id || ""));
+  formData.append("user_email", String(activeUser?.email || ""));
+  formData.append("user_name", String(activeUser?.name || ""));
 
   let backendResult = { ok: false, error: "Upload not executed." };
 
@@ -226,6 +235,8 @@ function cleanup() {
   activePageUrl = "";
   activePageTitle = "";
   activeNotesStyle = "professional_bullets";
+  activeUser = null;
+  recordingStartedAt = 0;
 }
 
 function pickSupportedMimeType() {

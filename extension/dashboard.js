@@ -1,4 +1,4 @@
-let backendBaseUrl = "http://127.0.0.1:8000";
+let backendBaseUrl = "https://continuum-61io.onrender.com/";
 let mode = "docs";
 let items = [];
 let displayedItems = [];

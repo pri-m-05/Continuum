@@ -32,17 +32,24 @@ class CaptureIntent(BaseModel):
     notes: str = ""
     evidence: CaptureIntentEvidence = Field(default_factory=CaptureIntentEvidence)
 
+class UserIdentity(BaseModel):
+    user_id: str = ""
+    email: str = ""
+    name: str = ""
+
 class IngestRequest(BaseModel):
     session_id: str
     page: PageMeta
     actions: List[UserAction]
     rules: Optional[AuditRules] = None
     intent: Optional[CaptureIntent] = None
+    user: Optional[UserIdentity] = None
 
 class GenerateRequest(BaseModel):
     session_id: str
     rules: Optional[AuditRules] = None
     intent: Optional[CaptureIntent] = None
+    user: Optional[UserIdentity] = None
 
 class AuditRequest(BaseModel):
     content: str
@@ -65,6 +72,7 @@ class ProcessGenerateRequest(BaseModel):
     meeting_ids: List[str] = Field(default_factory=list)
     rules: Optional[AuditRules] = None
     intent: Optional[CaptureIntent] = None
+    user: Optional[UserIdentity] = None
 
 class DocumentAskRequest(BaseModel):
     created_at: str
@@ -78,6 +86,7 @@ class ExternalDocumentGenerateRequest(BaseModel):
     audience: str = "team"
     notes: str = ""
     source_urls: List[str] = Field(default_factory=list)
+    user: Optional[UserIdentity] = None
 
 class ExternalAssistAskRequest(BaseModel):
     topic: str
@@ -86,3 +95,13 @@ class ExternalAssistAskRequest(BaseModel):
     audience: str = "team"
     notes: str = ""
     source_urls: List[str] = Field(default_factory=list)
+
+class UserBootstrapRequest(BaseModel):
+    email: str
+    name: str = ""
+    user_id: str = ""
+
+class AdminSetPlanRequest(BaseModel):
+    user_id: str = ""
+    email: str = ""
+    plan: str

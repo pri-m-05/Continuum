@@ -1,20 +1,20 @@
 from __future__ import annotations
-
+import os
 from pathlib import Path
 
 import requests
-import os
 from dotenv import load_dotenv
 
 # Load backend/.env before importing services that read environment variables.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.responses import Response
 
 from app.models import (
+    AdminSetPlanRequest,
     AuditRequest,
     AutomationRequest,
     DocumentUpdateRequest,
@@ -24,6 +24,7 @@ from app.models import (
     GenerateRequest,
     IngestRequest,
     ProcessGenerateRequest,
+    UserBootstrapRequest,
 )
 from app.services.audit import run_audit
 from app.services.automation import suggest_automation
@@ -55,8 +56,13 @@ from app.services.store import (
     get_sessions_by_ids,
     get_process_evidence_summary,
     list_screenshots_for_sessions,
+    get_user_status,
+    get_usage_limit_status,
+    set_user_plan,
+    upsert_user,
 )
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+ADMIN_TOKEN = os.getenv("CONTINUUM_ADMIN_TOKEN", "").strip()
 app = FastAPI(title="Continuum API", version="1.3.0")
 
 app.add_middleware(
@@ -79,6 +85,104 @@ def root():
 def health():
     return {"ok": True, "service": "continuum-api"}
 
+def _require_admin_token(token: str | None) -> None:
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=500, detail="Server admin token is not configured.")
+
+    if str(token or "").strip() != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid admin token.")
+
+USAGE_LIMIT_LABELS = {
+    "documents_generated": "documents",
+    "screenshots_saved": "screenshots",
+    "meetings_uploaded": "meetings",
+    "external_docs_generated": "external documents",
+}
+
+
+def _enforce_usage_limit(user_id: str | None, usage_key: str, amount: int = 1) -> None:
+    status = get_usage_limit_status(user_id=user_id, usage_key=usage_key, amount=amount)
+    if status.get("allowed"):
+        return
+
+    if status.get("reason") == "account_required":
+        raise HTTPException(status_code=401, detail="Connect a beta account before using this feature.")
+
+    label = USAGE_LIMIT_LABELS.get(usage_key, usage_key.replace("_", " "))
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            f"Free plan limit reached for {label}. "
+            f"You've used {status.get('current', 0)} of {status.get('limit', 0)}. "
+            f"Upgrade to continue."
+        ),
+    )
+
+def _resolve_user_from_identity(identity) -> dict | None:
+    if not identity:
+        return None
+
+    payload = identity.model_dump() if hasattr(identity, "model_dump") else dict(identity)
+    email = str(payload.get("email", "")).strip()
+    name = str(payload.get("name", "")).strip()
+    user_id = str(payload.get("user_id", "")).strip()
+
+    if not email and not user_id:
+        return None
+
+    return upsert_user(email=email, name=name, user_id=user_id)
+
+
+@app.post("/users/bootstrap")
+def users_bootstrap(payload: UserBootstrapRequest):
+    email = str(payload.email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required.")
+
+    user = upsert_user(email=email, name=payload.name, user_id=payload.user_id)
+    status = get_user_status(user_id=user.get("user_id"))
+    return {"ok": True, "user": status}
+
+
+@app.get("/users/status")
+def users_status(user_id: str | None = None, email: str | None = None):
+    status = get_user_status(user_id=user_id, email=email)
+    if not status:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"ok": True, "user": status}
+
+@app.post("/admin/users/set-plan")
+def admin_set_plan(
+    payload: AdminSetPlanRequest,
+    x_continuum_admin_token: str | None = Header(default=None),
+):
+    _require_admin_token(x_continuum_admin_token)
+
+    plan = str(payload.plan or "").strip().lower()
+    if plan not in {"free", "paid"}:
+        raise HTTPException(status_code=400, detail="plan must be 'free' or 'paid'.")
+
+    if not str(payload.user_id or "").strip() and not str(payload.email or "").strip():
+        raise HTTPException(status_code=400, detail="user_id or email is required.")
+
+    existing = None
+    if str(payload.user_id or "").strip():
+        existing = get_user_status(user_id=payload.user_id)
+    elif str(payload.email or "").strip():
+        existing = get_user_status(email=payload.email)
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    updated = set_user_plan(existing["user_id"], plan)
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return {
+        "ok": True,
+        "user": get_user_status(user_id=existing["user_id"])
+    }
+
 @app.get("/config/status")
 def config_status():
     ai = get_ai_status()
@@ -96,11 +200,18 @@ def config_status():
 def ingest_actions(payload: IngestRequest):
     actions = [action.model_dump() for action in payload.actions]
     page = payload.page.model_dump()
+    user = _resolve_user_from_identity(payload.user)
 
     cleaned_actions = dedupe_actions(actions)
     steps = actions_to_steps(cleaned_actions, page)
 
-    upsert_session(session_id=payload.session_id, page=page, actions=cleaned_actions, steps=steps)
+    upsert_session(
+        session_id=payload.session_id,
+        page=page,
+        actions=cleaned_actions,
+        steps=steps,
+        user_id=(user or {}).get("user_id"),
+    )
 
     evidence = get_session_evidence_summary(payload.session_id)
 
@@ -186,11 +297,14 @@ def _build_guide_payload(document: dict[str, Any], backend_base_url: str) -> dic
 
 @app.post("/docs/generate")
 def generate_docs(payload: GenerateRequest):
+    user = _resolve_user_from_identity(payload.user)
     session = get_session(payload.session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found.")
     page = session.get("page", {})
     steps = session.get("steps", [])
+    resolved_user_id = (user or {}).get("user_id") or session.get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "documents_generated")
     evidence = get_session_evidence_summary(payload.session_id)
     intent = payload.intent.model_dump() if payload.intent else None
 
@@ -203,7 +317,10 @@ def generate_docs(payload: GenerateRequest):
         payload.session_id,
         primary,
         audit,
-        extra_fields={"doc_type": (intent or {}).get("doc_type", "sop")},
+        extra_fields={
+            "doc_type": (intent or {}).get("doc_type", "sop"),
+            "user_id": (user or {}).get("user_id") or session.get("user_id", ""),
+        },
     )
 
     return {
@@ -217,6 +334,7 @@ def generate_docs(payload: GenerateRequest):
 
 @app.post("/docs/generate-process")
 def generate_docs_for_process(payload: ProcessGenerateRequest):
+    user = _resolve_user_from_identity(payload.user)
     if not payload.session_ids:
         raise HTTPException(status_code=400, detail="At least one included session is required.")
 
@@ -226,6 +344,8 @@ def generate_docs_for_process(payload: ProcessGenerateRequest):
 
     intent = payload.intent.model_dump() if payload.intent else None
     primary_page = sessions[0].get("page", {})
+    resolved_user_id = (user or {}).get("user_id") or sessions[0].get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "documents_generated")
 
     steps = []
     for session in sessions:
@@ -256,6 +376,7 @@ def generate_docs_for_process(payload: ProcessGenerateRequest):
             "process_id": payload.process_id or "",
             "source_session_ids": payload.session_ids,
             "included_meeting_ids": payload.meeting_ids,
+            "user_id": (user or {}).get("user_id") or sessions[0].get("user_id", ""),
         },
     )
 
@@ -292,6 +413,10 @@ def external_ask(payload: ExternalAssistAskRequest):
 
 @app.post("/docs/generate-external")
 def generate_external_doc(payload: ExternalDocumentGenerateRequest):
+    user = _resolve_user_from_identity(payload.user)
+    resolved_user_id = (user or {}).get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "documents_generated")
+    _enforce_usage_limit(resolved_user_id, "external_docs_generated")
     try:
         document, fetched_sources = generate_external_document(
             topic=payload.topic,
@@ -317,6 +442,7 @@ def generate_external_doc(payload: ExternalDocumentGenerateRequest):
             "source_basis": "trusted_external",
             "trusted_source_urls": [src["url"] for src in fetched_sources],
             "trusted_source_titles": [src["title"] for src in fetched_sources],
+            "user_id": (user or {}).get("user_id", ""),
         },
     )
 
@@ -455,6 +581,14 @@ def evidence_summary(session_id: str):
 
 @app.post("/sessions/screenshot")
 def sessions_screenshot(payload: dict):
+    user = None
+    if payload.get("user_email") or payload.get("user_id"):
+        user = upsert_user(
+            email=str(payload.get("user_email", "")).strip(),
+            name=str(payload.get("user_name", "")).strip(),
+            user_id=str(payload.get("user_id", "")).strip(),
+        )
+
     session_id = str(payload.get("session_id", "")).strip()
     page_url = str(payload.get("page_url", "")).strip()
     page_title = str(payload.get("page_title", "")).strip()
@@ -468,6 +602,10 @@ def sessions_screenshot(payload: dict):
     if not data_url:
         raise HTTPException(status_code=400, detail="data_url is required.")
 
+    session = get_session(session_id)
+    resolved_user_id = (user or {}).get("user_id") or (session or {}).get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "screenshots_saved")
+
     screenshot = save_screenshot(
         session_id=session_id,
         page_url=page_url,
@@ -476,6 +614,7 @@ def sessions_screenshot(payload: dict):
         caption=caption,
         recommended=recommended,
         step_index=step_index,
+        user_id=(user or {}).get("user_id"),
     )
     return {"ok": True, "screenshot": screenshot}
 
@@ -515,8 +654,20 @@ async def meetings_upload(
     mic_ok: str = Form(default="false"),
     tab_level: str = Form(default="0"),
     mic_level: str = Form(default="0"),
+    duration_seconds: str = Form(default="0"),
+    user_id: str = Form(default=""),
+    user_email: str = Form(default=""),
+    user_name: str = Form(default=""),
     file: UploadFile = File(...),
 ):
+    user = None
+    if user_email or user_id:
+        user = upsert_user(email=user_email, name=user_name, user_id=user_id)
+
+    session = get_session(session_id)
+    resolved_user_id = (user or {}).get("user_id") or (session or {}).get("user_id", "")
+    _enforce_usage_limit(resolved_user_id, "meetings_uploaded")
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded meeting file is empty.")
@@ -542,6 +693,8 @@ async def meetings_upload(
         mime_type=file.content_type or "audio/webm",
         transcript=transcript_text,
         notes=notes,
+        user_id=(user or {}).get("user_id"),
+        duration_seconds=int(float(duration_seconds or 0) or 0),
     )
 
     return {"ok": True, "meeting": meeting}

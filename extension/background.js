@@ -1,12 +1,41 @@
 const DEFAULT_SETTINGS = {
-  backendBaseUrl: "http://127.0.0.1:8000",
+  backendBaseUrl: "https://continuum-61io.onrender.com",
   auditRules: {
     required_sections: ["Purpose", "Preconditions", "Procedure", "Controls", "Evidence"],
     required_keywords: [],
     prohibited_words: []
   },
   captureInputValues: false,
-  meetingNotesStyle: "professional_bullets"
+  meetingNotesStyle: "professional_bullets",
+  userAccount: {
+    user_id: "",
+    email: "",
+    name: "",
+    plan: "free",
+    usage: {}
+  }
+};
+
+const LOCAL_PLAN_LIMITS = {
+  free: {
+    documents_generated: 25,
+    screenshots_saved: 100,
+    meetings_uploaded: 10,
+    external_docs_generated: 10
+  },
+  paid: {
+    documents_generated: null,
+    screenshots_saved: null,
+    meetings_uploaded: null,
+    external_docs_generated: null
+  }
+};
+
+const USAGE_LIMIT_LABELS = {
+  documents_generated: "documents",
+  screenshots_saved: "screenshots",
+  meetings_uploaded: "meetings",
+  external_docs_generated: "external documents"
 };
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -436,6 +465,7 @@ async function flushSession(sessionId) {
   if (!buffer?.actions?.length) return null;
 
   const intent = await getCaptureIntent(sessionId);
+  const user = await getConnectedUser();
 
   const result = await fetchJson(`${s.backendBaseUrl}/ingest-actions`, {
     method: "POST",
@@ -445,7 +475,8 @@ async function flushSession(sessionId) {
       page: buffer.page,
       actions: buffer.actions,
       rules: s.auditRules,
-      intent: intent || null
+      intent: intent || null,
+      user
     })
   });
 
@@ -459,6 +490,9 @@ async function generateDocsForCurrentProcess(payload) {
   const process = await getCurrentProcess();
 
   if (process?.intent?.process_name && Array.isArray(process.includedSessions) && process.includedSessions.length) {
+    await syncConnectedUserStatus();
+    await enforceLocalUsageLimit("documents_generated");
+
     const sessionIds = process.includedSessions.map((item) => item.sessionId).filter(Boolean);
 
     for (const sessionId of sessionIds) {
@@ -466,6 +500,7 @@ async function generateDocsForCurrentProcess(payload) {
     }
 
     const s = await getSettings();
+    const user = await getConnectedUser();
     const result = await fetchJson(`${s.backendBaseUrl}/docs/generate-process`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -474,7 +509,8 @@ async function generateDocsForCurrentProcess(payload) {
         session_ids: sessionIds,
         meeting_ids: Array.isArray(process.includedMeetingIds) ? process.includedMeetingIds : [],
         rules: s.auditRules,
-        intent: process.intent
+        intent: process.intent,
+        user
       })
     });
 
@@ -484,6 +520,8 @@ async function generateDocsForCurrentProcess(payload) {
     if (sessionIds[0]) lastResults[sessionIds[0]] = result;
     await storageSet("local", { continuum_last_results: lastResults });
 
+    await bumpStoredUsage({ documents_generated: 1 });
+    await syncConnectedUserStatus(user);
     return result;
   }
 
@@ -496,23 +534,32 @@ async function generateDocsForSession(sessionId) {
   const intent = await getCaptureIntent(sessionId);
   if (!intent?.process_name) throw new Error("Start a process first before generating a document.");
 
+  await syncConnectedUserStatus();
+  await enforceLocalUsageLimit("documents_generated");
   await flushSession(sessionId);
 
   const s = await getSettings();
+  const user = await getConnectedUser();
   const result = await fetchJson(`${s.backendBaseUrl}/docs/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent })
+    body: JSON.stringify({ session_id: sessionId, rules: s.auditRules, intent, user })
   });
 
   const lastResults = (await storageGet("local", "continuum_last_results")).continuum_last_results || {};
   lastResults[sessionId] = result;
   await storageSet("local", { continuum_last_results: lastResults });
 
+  await bumpStoredUsage({ documents_generated: 1 });
+  await syncConnectedUserStatus(user);
+
   return result;
 }
 
 async function captureScreenshotForActiveTab(payload) {
+  await syncConnectedUserStatus();
+  await enforceLocalUsageLimit("screenshots_saved");
+
   const s = await getSettings();
   const tab = await getActiveTab();
   if (!tab?.id) throw new Error("No active tab found.");
@@ -529,6 +576,7 @@ async function captureScreenshotForActiveTab(payload) {
   }
 
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+  const user = await getConnectedUser();
 
   const result = await fetchJson(`${s.backendBaseUrl}/sessions/screenshot`, {
     method: "POST",
@@ -540,10 +588,15 @@ async function captureScreenshotForActiveTab(payload) {
       data_url: dataUrl,
       caption: payload?.caption || "",
       recommended: !!payload?.recommended,
-      step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0
+      step_index: Number.isFinite(payload?.step_index) ? payload.step_index : 0,
+      user_id: user?.user_id || "",
+      user_email: user?.email || "",
+      user_name: user?.name || ""
     })
   });
 
+  await bumpStoredUsage({ screenshots_saved: 1 });
+  await syncConnectedUserStatus(user);
   return { ok: true, screenshot: result.screenshot, sessionId };
 }
 
@@ -717,6 +770,9 @@ async function pingOffscreen() {
 }
 
 async function startMeetingCaptureForActiveTab(opts) {
+  await syncConnectedUserStatus();
+  await enforceLocalUsageLimit("meetings_uploaded");
+
   const state = (await storageGet("local", "continuum_meeting_state")).continuum_meeting_state || {};
   if (state.status === "recording") return { ok: true, ...state };
 
@@ -727,13 +783,20 @@ async function startMeetingCaptureForActiveTab(opts) {
   const sessionInfo = await getOrCreateSessionForTab(tab.id, tab.url || "");
 
   await storageSet("local", {
-    continuum_meeting_state: { status: "arming", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" }
+    continuum_meeting_state: {
+      status: "arming",
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      lastError: ""
+    }
   });
 
   try {
     await ensureOffscreenDocument();
 
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+    const user = await getConnectedUser();
 
     await sendToOffscreen("OFFSCREEN_START_RECORDING", {
       streamId,
@@ -742,17 +805,32 @@ async function startMeetingCaptureForActiveTab(opts) {
       backendBaseUrl: s.backendBaseUrl,
       pageUrl: tab.url || "",
       pageTitle: tab.title || "",
-      includeMic: true, // MIC ALWAYS
-      notesStyle: s.meetingNotesStyle || "professional_bullets"
+      includeMic: true,
+      notesStyle: s.meetingNotesStyle || "professional_bullets",
+      user,
     });
 
-    const next = { status: "recording", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: "" };
+    const next = {
+      status: "recording",
+      sessionId: sessionInfo.sessionId,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      lastError: ""
+    };
     await storageSet("local", { continuum_meeting_state: next });
     await chrome.action.setBadgeText({ text: "REC", tabId: tab.id });
     return { ok: true, ...next };
   } catch (error) {
     const msg = error?.message ? error.message : String(error);
-    await storageSet("local", { continuum_meeting_state: { status: "error", sessionId: sessionInfo.sessionId, tabId: tab.id, startedAt: Date.now(), lastError: msg } });
+    await storageSet("local", {
+      continuum_meeting_state: {
+        status: "error",
+        sessionId: sessionInfo.sessionId,
+        tabId: tab.id,
+        startedAt: Date.now(),
+        lastError: msg
+      }
+    });
     throw error;
   }
 }
@@ -783,9 +861,24 @@ async function handleOffscreenMeetingComplete(payload) {
   if (payload?.meeting?.session_id) {
     latest[payload.meeting.session_id] = payload.meeting;
     await storageSet("local", { continuum_latest_meetings: latest });
-    await storageSet("local", { continuum_meeting_state: { status: "idle", sessionId: payload.meeting.session_id, lastCompletedAt: Date.now(), lastError: "" } });
+    await storageSet("local", {
+        continuum_meeting_state: {
+        status: "idle",
+        sessionId: payload.meeting.session_id,
+        lastCompletedAt: Date.now(),
+        lastError: ""
+        }
+    });
+
+    const durationSeconds = Number(payload?.meeting?.duration_seconds || 0);
+    await bumpStoredUsage({
+        meetings_uploaded: 1,
+        meeting_minutes_processed: durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : 0
+    });
+
+    await syncConnectedUserStatus();
     return;
-  }
+    }
 
   await storageSet("local", { continuum_meeting_state: { status: "error", sessionId: currentState.sessionId || null, lastCompletedAt: Date.now(), lastError: payload?.error || "Meeting finished without returning a record." } });
 }
@@ -907,16 +1000,213 @@ async function getOrCreateSessionForTab(tabId, currentUrl) {
   return next;
 }
 
+function normalizeBaseUrl(value) {
+  const trimmed = String(value || "").trim();
+  return (trimmed || DEFAULT_SETTINGS.backendBaseUrl).replace(/\/+$/, "");
+}
+
+function getUsageSnapshot(account = {}) {
+  const plan = String(account.plan || "free").trim().toLowerCase();
+  const fallbackLimits = LOCAL_PLAN_LIMITS[plan] || LOCAL_PLAN_LIMITS.free;
+
+  return {
+    plan,
+    usage: {
+      documents_generated: Number(account?.usage?.documents_generated || 0),
+      screenshots_saved: Number(account?.usage?.screenshots_saved || 0),
+      meetings_uploaded: Number(account?.usage?.meetings_uploaded || 0),
+      meeting_minutes_processed: Number(account?.usage?.meeting_minutes_processed || 0),
+      external_docs_generated: Number(account?.usage?.external_docs_generated || 0)
+    },
+    limits: {
+      ...fallbackLimits,
+      ...(account?.limits || {})
+    }
+  };
+}
+
+async function enforceLocalUsageLimit(usageKey, amount = 1) {
+  const s = await getSettings();
+  const account = s.userAccount || {};
+
+  if (!account.user_id && !account.email) {
+    throw new Error("Connect a beta account before using this feature.");
+  }
+
+  const { usage, limits, plan } = getUsageSnapshot(account);
+  const limit = limits[usageKey];
+  const current = Number(usage[usageKey] || 0);
+  const requestedAmount = Math.max(1, Number(amount || 1));
+
+  if (limit == null) {
+    return { account, plan, current, limit: null };
+  }
+
+  if (current + requestedAmount > Number(limit)) {
+    const label = USAGE_LIMIT_LABELS[usageKey] || usageKey.replace(/_/g, " ");
+    const planLabel = plan === "paid" ? "Paid" : "Free";
+    throw new Error(
+      `${planLabel} plan limit reached for ${label}. You've used ${current} of ${limit}. Upgrade to continue.`
+    );
+  }
+
+  return { account, plan, current, limit: Number(limit) };
+}
+
+function mergeUsageCounts(existingUsage = {}, incomingUsage = {}) {
+  const keys = new Set([
+    ...Object.keys(existingUsage || {}),
+    ...Object.keys(incomingUsage || {})
+  ]);
+
+  const merged = {};
+  for (const key of keys) {
+    merged[key] = Math.max(
+      Number(existingUsage?.[key] || 0),
+      Number(incomingUsage?.[key] || 0)
+    );
+  }
+  return merged;
+}
+
 async function getSettings() {
   const r = await storageGet("sync", "continuum_settings");
-  return {
+  const merged = {
     ...DEFAULT_SETTINGS,
     ...(r.continuum_settings || {}),
     auditRules: {
       ...DEFAULT_SETTINGS.auditRules,
       ...((r.continuum_settings || {}).auditRules || {})
+    },
+    userAccount: {
+      ...DEFAULT_SETTINGS.userAccount,
+      ...((r.continuum_settings || {}).userAccount || {})
     }
   };
+
+  merged.backendBaseUrl = normalizeBaseUrl(merged.backendBaseUrl);
+  merged.userAccount.email = String(merged.userAccount.email || "").trim().toLowerCase();
+  merged.userAccount.name = String(merged.userAccount.name || "").trim();
+  return merged;
+}
+
+async function saveSettingsPatch(nextSettings) {
+  const current = await getSettings();
+  const nextUserAccount = (nextSettings || {}).userAccount || {};
+
+  const merged = {
+    ...current,
+    ...nextSettings,
+    backendBaseUrl: normalizeBaseUrl(nextSettings.backendBaseUrl || current.backendBaseUrl),
+    auditRules: {
+      ...current.auditRules,
+      ...((nextSettings || {}).auditRules || {})
+    },
+    userAccount: {
+      ...current.userAccount,
+      ...nextUserAccount,
+      usage: mergeUsageCounts(
+        current.userAccount?.usage || {},
+        nextUserAccount.usage || {}
+      )
+    }
+  };
+
+  await storageSet("sync", { continuum_settings: merged });
+  return merged;
+}
+
+async function bumpStoredUsage(deltas = {}) {
+  const current = await getSettings();
+  const account = current.userAccount || {};
+
+  if (!account.user_id && !account.email) return current;
+
+  const nextUsage = { ...(account.usage || {}) };
+
+  for (const [key, delta] of Object.entries(deltas)) {
+    nextUsage[key] = Math.max(
+      0,
+      Number(nextUsage[key] || 0) + Number(delta || 0)
+    );
+  }
+
+  return await saveSettingsPatch({
+    userAccount: {
+      ...account,
+      usage: nextUsage
+    }
+  });
+}
+
+async function syncConnectedUserStatus(preferredUser = null) {
+  const s = await getSettings();
+  const account = preferredUser || s.userAccount || {};
+
+  if (!account.user_id && !account.email) return null;
+
+  try {
+    let user = null;
+
+    if (account.email) {
+      const bootstrapped = await fetchJson(`${s.backendBaseUrl}/users/bootstrap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: account.email || "",
+          name: account.name || "",
+          user_id: account.user_id || ""
+        })
+      });
+      user = bootstrapped?.user || null;
+    } else if (account.user_id) {
+      const status = await fetchJson(
+        `${s.backendBaseUrl}/users/status?user_id=${encodeURIComponent(account.user_id)}`,
+        { method: "GET" }
+      );
+      user = status?.user || null;
+    }
+
+    if (user) {
+      await saveSettingsPatch({
+        userAccount: {
+          ...user,
+          email: user.email || account.email || "",
+          name: user.name || account.name || "",
+          usage: mergeUsageCounts(account.usage || {}, user.usage || {})
+        }
+      });
+
+      return {
+        user_id: user.user_id || "",
+        email: user.email || account.email || "",
+        name: user.name || account.name || ""
+      };
+    }
+  } catch (_) {}
+
+  return {
+    user_id: account.user_id || "",
+    email: account.email || "",
+    name: account.name || ""
+  };
+}
+
+async function getConnectedUser() {
+  const s = await getSettings();
+  const account = s.userAccount || {};
+
+  if (!account.email && !account.user_id) return null;
+
+  if (account.user_id) {
+    return {
+      user_id: account.user_id || "",
+      email: account.email || "",
+      name: account.name || ""
+    };
+  }
+
+  return await syncConnectedUserStatus(account);
 }
 
 function fetchJson(url, options) {

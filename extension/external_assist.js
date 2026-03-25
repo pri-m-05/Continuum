@@ -1,8 +1,9 @@
-let backendBaseUrl = "http://127.0.0.1:8000";
+let backendBaseUrl = "https://continuum-61io.onrender.com/";
 let messageCounter = 0;
 let activeSourceUrls = [];
 let generatedDocumentRef = null;
 let guideReady = false;
+let connectedUser = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSettings();
@@ -16,6 +17,7 @@ async function loadSettings() {
   const res = await new Promise((resolve) => chrome.storage.sync.get("continuum_settings", resolve));
   const settings = res.continuum_settings || {};
   backendBaseUrl = settings.backendBaseUrl || backendBaseUrl;
+  connectedUser = settings.userAccount || null;
 }
 
 function getManualSourceUrls() {
@@ -192,7 +194,14 @@ async function generateExternalDraft() {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        ...payload,
+        user: connectedUser && (connectedUser.user_id || connectedUser.email) ? {
+            user_id: connectedUser.user_id || "",
+            email: connectedUser.email || "",
+            name: connectedUser.name || ""
+        } : null
+      })
     });
 
     const data = await res.json();

@@ -129,13 +129,21 @@ def upsert_user(email: str, name: str = "", user_id: str = "") -> Dict[str, Any]
     users = data.get("users", {})
 
     target_user_id = None
-    if provided_user_id and provided_user_id in users:
-        target_user_id = provided_user_id
-    elif normalized_email:
+
+    # First, try to find an existing user by email.
+    if normalized_email:
         for existing_id, existing_user in users.items():
             if _normalize_email(existing_user.get("email", "")) == normalized_email:
                 target_user_id = existing_id
                 break
+
+    # Only fall back to a provided user_id when it does not conflict with a different email.
+    if not target_user_id and provided_user_id and provided_user_id in users:
+        existing_user = users[provided_user_id]
+        existing_email = _normalize_email(existing_user.get("email", ""))
+
+        if not normalized_email or existing_email == normalized_email:
+            target_user_id = provided_user_id
 
     if not target_user_id:
         target_user_id = provided_user_id or f"user_{uuid.uuid4().hex}"

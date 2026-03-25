@@ -43,6 +43,10 @@ function getSourceMeta(item) {
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("libraryBtn").addEventListener("click", () => sendMessage({ type: "OPEN_LIBRARY" }));
   document.getElementById("settingsBtn").addEventListener("click", () => sendMessage({ type: "OPEN_OPTIONS_PAGE" }));
+  document.getElementById("upgradeModalCta").addEventListener("click", openUpgradePageFromSidepanel);
+  document.getElementById("upgradeModalDismiss").addEventListener("click", hideUpgradeModal);
+  document.getElementById("closeUpgradeModalBtn").addEventListener("click", hideUpgradeModal);
+
 
   document.getElementById("saveIntentBtn").addEventListener("click", saveIntent);
   document.getElementById("pauseIntentBtn").addEventListener("click", togglePauseCapture);
@@ -76,6 +80,37 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 let currentProcess = null;
+
+function isUpgradeLimitError(message) {
+  return /Free plan limit reached/i.test(String(message || ""));
+}
+
+function showUpgradeModal(message) {
+  const overlay = document.getElementById("upgradeModal");
+  const title = document.getElementById("upgradeModalTitle");
+  const body = document.getElementById("upgradeModalBody");
+
+  title.textContent = "Free plan limit reached";
+  body.textContent = message || "You’ve reached a free plan limit. Upgrade to continue.";
+
+  overlay.classList.remove("hidden");
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+function hideUpgradeModal() {
+  const overlay = document.getElementById("upgradeModal");
+  overlay.classList.add("hidden");
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+async function openUpgradePageFromSidepanel() {
+  const reason = document.getElementById("upgradeModalBody").textContent || "";
+  await sendMessage({
+    type: "OPEN_UPGRADE_PAGE",
+    payload: { reason }
+  });
+  hideUpgradeModal();
+}
 
 async function pingBackend() {
   const el = document.getElementById("backendStatus");
@@ -318,7 +353,13 @@ async function generateDocs() {
     });
 
     renderDraft(res);
-  } catch (e) {
+    } catch (e) {
+    if (isUpgradeLimitError(e.message)) {
+      box.textContent = "Upgrade required to continue.";
+      showUpgradeModal(e.message);
+      return;
+    }
+
     box.textContent = `Error: ${e.message}`;
   }
 }
@@ -434,7 +475,13 @@ async function captureScreenshot({ recommended }) {
       imgBox.innerHTML = `<img src="${res.screenshot.data_url}" alt="Screenshot" />`;
     }
     await refreshGuidance();
-  } catch (e) {
+    } catch (e) {
+    if (isUpgradeLimitError(e.message)) {
+      status.textContent = "Upgrade required to continue.";
+      showUpgradeModal(e.message);
+      return;
+    }
+
     status.textContent = `Error: ${e.message}`;
   }
 }
@@ -468,7 +515,13 @@ async function startMeetingCapture() {
     await sendMessage({ type: "START_MEETING_CAPTURE", payload: { includeMic: true } });
     await refreshMeetingStatus();
     startMeetingPolling();
-  } catch (e) {
+   } catch (e) {
+    if (isUpgradeLimitError(e.message)) {
+      box.innerHTML = `<div class="subtle">Upgrade required to continue.</div>`;
+      showUpgradeModal(e.message);
+      return;
+    }
+
     box.innerHTML = `<div class="subtle">Error: ${escapeHtml(e.message)}</div>`;
   }
 }

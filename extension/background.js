@@ -108,7 +108,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const query = params.toString();
             const url = chrome.runtime.getURL(`upgrade.html${query ? `?${query}` : ""}`);
 
+            try {
+            const currentWindow = await chrome.windows.getCurrent();
+            const width = 920;
+            const height = 760;
+
+            const left =
+                typeof currentWindow.left === "number" && typeof currentWindow.width === "number"
+                ? Math.max(0, Math.round(currentWindow.left + (currentWindow.width - width) / 2))
+                : undefined;
+
+            const top =
+                typeof currentWindow.top === "number" && typeof currentWindow.height === "number"
+                ? Math.max(0, Math.round(currentWindow.top + (currentWindow.height - height) / 2))
+                : undefined;
+
+            await chrome.windows.create({
+                url,
+                type: "popup",
+                width,
+                height,
+                left,
+                top,
+                focused: true
+            });
+            } catch (_) {
             await chrome.tabs.create({ url });
+            }
+
             sendResponse({ ok: true });
             return;
         }

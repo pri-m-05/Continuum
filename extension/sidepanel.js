@@ -86,29 +86,27 @@ function isUpgradeLimitError(message) {
 }
 
 function showUpgradeModal(message) {
-  const overlay = document.getElementById("upgradeModal");
-  const title = document.getElementById("upgradeModalTitle");
-  const body = document.getElementById("upgradeModalBody");
-
-  title.textContent = "Free plan limit reached";
-  body.textContent = message || "You’ve reached a free plan limit. Upgrade to continue.";
-
-  overlay.classList.remove("hidden");
-  overlay.setAttribute("aria-hidden", "false");
+  void openUpgradePageFromSidepanel(message);
 }
 
 function hideUpgradeModal() {
   const overlay = document.getElementById("upgradeModal");
+  if (!overlay) return;
   overlay.classList.add("hidden");
   overlay.setAttribute("aria-hidden", "true");
 }
 
-async function openUpgradePageFromSidepanel() {
-  const reason = document.getElementById("upgradeModalBody").textContent || "";
+async function openUpgradePageFromSidepanel(reasonOverride = "") {
+  const reason =
+    reasonOverride ||
+    document.getElementById("upgradeModalBody")?.textContent ||
+    "You’ve reached a free plan limit. Upgrade to continue.";
+
   await sendMessage({
     type: "OPEN_UPGRADE_PAGE",
     payload: { reason }
   });
+
   hideUpgradeModal();
 }
 

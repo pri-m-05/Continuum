@@ -213,20 +213,28 @@ async function refreshAccountStatus() {
   const existing = await getSavedSettings();
   const backendBaseUrl = normalizeBaseUrl(document.getElementById("backendBaseUrl").value);
   const account = existing.userAccount || DEFAULT_SETTINGS.userAccount;
+  const statusEl = document.getElementById("accountStatusText");
 
   if (!account.user_id && !account.email) {
     renderAccountStatus(account);
     return;
   }
 
+  statusEl.textContent = "Refreshing plan from backend...";
+
   try {
     let user = null;
 
     if (account.email) {
-      user = await bootstrapAccount(backendBaseUrl, account);
+      const response = await fetchJson(
+        `${backendBaseUrl}/users/status?email=${encodeURIComponent(account.email)}`,
+        { cache: "no-store" }
+      );
+      user = response.user || null;
     } else if (account.user_id) {
       const response = await fetchJson(
-        `${backendBaseUrl}/users/status?user_id=${encodeURIComponent(account.user_id)}`
+        `${backendBaseUrl}/users/status?user_id=${encodeURIComponent(account.user_id)}`,
+        { cache: "no-store" }
       );
       user = response.user || null;
     }
@@ -297,16 +305,17 @@ function renderAccountStatus(account) {
   const limitEl = document.getElementById("accountLimitText");
   const upgradeBtn = document.getElementById("requestUpgradeBtn");
 
-  const safeAccount = {
+    const safeAccount = {
     ...DEFAULT_SETTINGS.userAccount,
     ...(account || {})
-  };
+    };
+    const normalizedPlan = String(safeAccount.plan || "free").trim().toLowerCase();
 
   if (!safeAccount.user_id && !safeAccount.email) {
     statusEl.textContent = "No beta account connected yet.";
     usageEl.textContent = "";
     limitEl.textContent = "";
-    upgradeBtn.style.display = "none";
+    upgradeBtn.classList.add("isHidden");
     return;
   }
 
@@ -321,7 +330,7 @@ function renderAccountStatus(account) {
   const meetingsLimit = getPlanLimit(safeAccount, "meetings_uploaded");
   const externalDocsLimit = getPlanLimit(safeAccount, "external_docs_generated");
 
-  statusEl.textContent = `Connected as ${safeAccount.name || safeAccount.email || "beta user"} • Plan: ${safeAccount.plan || "free"}`;
+  statusEl.textContent = `Connected as ${safeAccount.name || safeAccount.email || "beta user"} • Plan: ${normalizedPlan}`;
 
   usageEl.textContent = [
     formatUsageLine("Docs", docs, docsLimit),
@@ -330,13 +339,13 @@ function renderAccountStatus(account) {
     formatUsageLine("External docs", externalDocs, externalDocsLimit),
   ].join(" • ");
 
-  if ((safeAccount.plan || "free") === "paid") {
-    limitEl.textContent = "Paid plan active. Current beta setup uses unlimited usage.";
-    upgradeBtn.style.display = "none";
-  } else {
-    limitEl.textContent = "Free plan includes limited docs, screenshots, meetings, and external docs. Upgrade when you need more.";
-    upgradeBtn.style.display = "inline-flex";
-  }
+    if (normalizedPlan === "paid") {
+        limitEl.textContent = "Paid plan active. Current beta setup uses unlimited usage.";
+        upgradeBtn.classList.add("isHidden");
+    } else {
+        limitEl.textContent = "Free plan includes limited docs, screenshots, meetings, and external docs. Upgrade when you need more.";
+        upgradeBtn.classList.remove("isHidden");
+    }
 }
 
 async function refreshAiStatus() {

@@ -4,3 +4,5 @@ backend/app/data/
 extension/react-preview/node_modules/
 extension-release/
 *.zip
+__pycache__/
+*.pyc

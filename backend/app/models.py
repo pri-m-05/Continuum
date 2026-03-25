@@ -100,3 +100,8 @@ class UserBootstrapRequest(BaseModel):
     email: str
     name: str = ""
     user_id: str = ""
+
+class AdminSetPlanRequest(BaseModel):
+    user_id: str = ""
+    email: str = ""
+    plan: str

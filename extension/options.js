@@ -16,11 +16,14 @@ const DEFAULT_SETTINGS = {
   }
 };
 
+const UPGRADE_CONTACT_EMAIL = "pmamman@uwaterloo.ca";
+
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("saveBtn").addEventListener("click", saveSettings);
   document.getElementById("refreshAiStatusBtn").addEventListener("click", refreshAiStatus);
   document.getElementById("connectAccountBtn").addEventListener("click", connectAccount);
   document.getElementById("refreshAccountBtn").addEventListener("click", refreshAccountStatus);
+  document.getElementById("requestUpgradeBtn").addEventListener("click", requestUpgrade);
 
   await loadSettings();
   await refreshAiStatus();
@@ -66,6 +69,24 @@ function mergeUsageCounts(existingUsage = {}, incomingUsage = {}) {
     );
   }
   return merged;
+}
+
+function getPlanLimit(account, key) {
+  const limits = account?.limits || {};
+  const value = limits[key];
+  return value == null ? null : Number(value);
+}
+
+function getRemaining(limit, used) {
+  if (limit == null) return null;
+  return Math.max(0, Number(limit) - Number(used || 0));
+}
+
+function formatUsageLine(label, used, limit) {
+  if (limit == null) {
+    return `${label}: ${used} used • Unlimited`;
+  }
+  return `${label}: ${used}/${limit} used • ${getRemaining(limit, used)} left`;
 }
 
 async function loadSettings() {
@@ -212,6 +233,44 @@ async function refreshAccountStatus() {
   }
 }
 
+async function requestUpgrade() {
+  const settings = await getSavedSettings();
+  const account = settings.userAccount || DEFAULT_SETTINGS.userAccount;
+
+  if (!UPGRADE_CONTACT_EMAIL || UPGRADE_CONTACT_EMAIL.includes("replace-with-your-email")) {
+    document.getElementById("status").textContent = "Set UPGRADE_CONTACT_EMAIL in options.js first.";
+    return;
+  }
+
+  if (!account.email && !account.user_id) {
+    document.getElementById("status").textContent = "Connect a beta account first.";
+    return;
+  }
+
+  const usage = account.usage || {};
+  const subject = encodeURIComponent(`Continuum upgrade request - ${account.email || account.user_id || "beta-user"}`);
+  const body = encodeURIComponent(
+`Hi,
+
+I'd like to request a Continuum paid upgrade.
+
+Name: ${account.name || ""}
+Email: ${account.email || ""}
+User ID: ${account.user_id || ""}
+
+Current plan: ${account.plan || "free"}
+Usage:
+- Docs: ${Number(usage.documents_generated || 0)}
+- Screenshots: ${Number(usage.screenshots_saved || 0)}
+- Meetings: ${Number(usage.meetings_uploaded || 0)}
+- External docs: ${Number(usage.external_docs_generated || 0)}
+
+Thanks.`
+  );
+
+  window.location.href = `mailto:${UPGRADE_CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+}
+
 async function bootstrapAccount(backendBaseUrl, account) {
   const response = await fetchJson(`${backendBaseUrl}/users/bootstrap`, {
     method: "POST",
@@ -233,6 +292,9 @@ async function bootstrapAccount(backendBaseUrl, account) {
 function renderAccountStatus(account) {
   const statusEl = document.getElementById("accountStatusText");
   const usageEl = document.getElementById("accountUsageText");
+  const limitEl = document.getElementById("accountLimitText");
+  const upgradeBtn = document.getElementById("requestUpgradeBtn");
+
   const safeAccount = {
     ...DEFAULT_SETTINGS.userAccount,
     ...(account || {})
@@ -241,16 +303,38 @@ function renderAccountStatus(account) {
   if (!safeAccount.user_id && !safeAccount.email) {
     statusEl.textContent = "No beta account connected yet.";
     usageEl.textContent = "";
+    limitEl.textContent = "";
+    upgradeBtn.style.display = "none";
     return;
   }
-
-  statusEl.textContent = `Connected as ${safeAccount.name || safeAccount.email || "beta user"} • Plan: ${safeAccount.plan || "free"}`;
 
   const usage = safeAccount.usage || {};
   const docs = Number(usage.documents_generated || 0);
   const shots = Number(usage.screenshots_saved || 0);
   const meetings = Number(usage.meetings_uploaded || 0);
-  usageEl.textContent = `Usage so far — Docs: ${docs}, Screenshots: ${shots}, Meetings: ${meetings}`;
+  const externalDocs = Number(usage.external_docs_generated || 0);
+
+  const docsLimit = getPlanLimit(safeAccount, "documents_generated");
+  const shotsLimit = getPlanLimit(safeAccount, "screenshots_saved");
+  const meetingsLimit = getPlanLimit(safeAccount, "meetings_uploaded");
+  const externalDocsLimit = getPlanLimit(safeAccount, "external_docs_generated");
+
+  statusEl.textContent = `Connected as ${safeAccount.name || safeAccount.email || "beta user"} • Plan: ${safeAccount.plan || "free"}`;
+
+  usageEl.textContent = [
+    formatUsageLine("Docs", docs, docsLimit),
+    formatUsageLine("Screenshots", shots, shotsLimit),
+    formatUsageLine("Meetings", meetings, meetingsLimit),
+    formatUsageLine("External docs", externalDocs, externalDocsLimit),
+  ].join(" • ");
+
+  if ((safeAccount.plan || "free") === "paid") {
+    limitEl.textContent = "Paid plan active. Current beta setup uses unlimited usage.";
+    upgradeBtn.style.display = "none";
+  } else {
+    limitEl.textContent = "Free plan includes limited docs, screenshots, meetings, and external docs. Upgrade when you need more.";
+    upgradeBtn.style.display = "inline-flex";
+  }
 }
 
 async function refreshAiStatus() {

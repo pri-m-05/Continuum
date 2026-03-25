@@ -8,12 +8,13 @@ from dotenv import load_dotenv
 # Load backend/.env before importing services that read environment variables.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.responses import Response
 
 from app.models import (
+    AdminSetPlanRequest,
     AuditRequest,
     AutomationRequest,
     DocumentUpdateRequest,
@@ -57,9 +58,11 @@ from app.services.store import (
     list_screenshots_for_sessions,
     get_user_status,
     get_usage_limit_status,
+    set_user_plan,
     upsert_user,
 )
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+ADMIN_TOKEN = os.getenv("CONTINUUM_ADMIN_TOKEN", "").strip()
 app = FastAPI(title="Continuum API", version="1.3.0")
 
 app.add_middleware(
@@ -81,6 +84,13 @@ def root():
 @app.get("/health")
 def health():
     return {"ok": True, "service": "continuum-api"}
+
+def _require_admin_token(token: str | None) -> None:
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=500, detail="Server admin token is not configured.")
+
+    if str(token or "").strip() != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid admin token.")
 
 USAGE_LIMIT_LABELS = {
     "documents_generated": "documents",
@@ -140,6 +150,38 @@ def users_status(user_id: str | None = None, email: str | None = None):
     if not status:
         raise HTTPException(status_code=404, detail="User not found.")
     return {"ok": True, "user": status}
+
+@app.post("/admin/users/set-plan")
+def admin_set_plan(
+    payload: AdminSetPlanRequest,
+    x_continuum_admin_token: str | None = Header(default=None),
+):
+    _require_admin_token(x_continuum_admin_token)
+
+    plan = str(payload.plan or "").strip().lower()
+    if plan not in {"free", "paid"}:
+        raise HTTPException(status_code=400, detail="plan must be 'free' or 'paid'.")
+
+    if not str(payload.user_id or "").strip() and not str(payload.email or "").strip():
+        raise HTTPException(status_code=400, detail="user_id or email is required.")
+
+    existing = None
+    if str(payload.user_id or "").strip():
+        existing = get_user_status(user_id=payload.user_id)
+    elif str(payload.email or "").strip():
+        existing = get_user_status(email=payload.email)
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    updated = set_user_plan(existing["user_id"], plan)
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return {
+        "ok": True,
+        "user": get_user_status(user_id=existing["user_id"])
+    }
 
 @app.get("/config/status")
 def config_status():

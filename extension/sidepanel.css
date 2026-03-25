@@ -606,3 +606,51 @@ button.primary {
     flex: 1 1 0;
   }
 }
+
+.upgradeModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(12, 10, 18, 0.52);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.upgradeModalOverlay.hidden {
+  display: none;
+}
+
+.upgradeModalCard {
+  width: min(100%, 420px);
+  background: var(--surface-strong);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.upgradeModalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.upgradeModalHeader h2 {
+  margin: 0;
+}
+
+.upgradeModalActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.upgradeModalActions button {
+  flex: 1 1 0;
+  min-width: 0;
+}

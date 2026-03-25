@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Upgrade Continuum</title>
+    <link rel="stylesheet" href="upgrade.css" />
+    <link rel="stylesheet" href="theme.css" />
+    <script src="theme.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="pageHeader">
+        <div>
+          <h1>Upgrade Continuum</h1>
+          <p id="reasonText" class="subtle">Compare plans and request an upgrade.</p>
+        </div>
+        <button id="themeToggleBtn" class="ghost theme-toggle" data-theme-toggle type="button"></button>
+      </header>
+
+      <section class="card">
+        <h2>Current plan</h2>
+        <p id="currentPlanText" class="subtle">Loading plan...</p>
+        <p id="currentUsageText" class="subtle"></p>
+      </section>
+
+      <section class="compareGrid">
+        <article class="planCard">
+          <h2>Free</h2>
+          <p class="planSubtle">Best for trying the workflow.</p>
+          <ul class="featureList">
+            <li>25 document generations</li>
+            <li>100 screenshots</li>
+            <li>10 meeting uploads</li>
+            <li>10 external docs</li>
+            <li>Great for early testing</li>
+          </ul>
+        </article>
+
+        <article class="planCard planCard--featured">
+          <h2>Paid</h2>
+          <p class="planSubtle">Best for regular use and heavier workflows.</p>
+          <ul class="featureList">
+            <li>Unlimited docs in current beta setup</li>
+            <li>Unlimited screenshots in current beta setup</li>
+            <li>Unlimited meetings in current beta setup</li>
+            <li>Unlimited external docs in current beta setup</li>
+            <li>Priority access during paid beta</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Upgrade</h2>
+        <p class="subtle">
+          Request an upgrade and we’ll move your account from free to paid for beta testing.
+        </p>
+
+        <div class="actions">
+          <button id="requestUpgradeBtn" class="primary" type="button">Request Upgrade</button>
+          <button id="openSettingsBtn" class="ghost" type="button">Open Settings</button>
+        </div>
+
+        <p id="upgradeStatus" class="subtle"></p>
+      </section>
+    </div>
+
+    <script src="upgrade.js"></script>
+  </body>
+</html>

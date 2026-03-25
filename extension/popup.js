@@ -1,3 +1,15 @@
+function isUpgradeLimitError(message) {
+  return /Free plan limit reached/i.test(String(message || ""));
+}
+
+async function openUpgradePage(reason = "") {
+  await sendMessage({
+    type: "OPEN_UPGRADE_PAGE",
+    payload: { reason }
+  });
+  window.close();
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("openWorkspaceBtn").addEventListener("click", openWorkspaceFromPopup);
   document.getElementById("openLibraryBtn").addEventListener("click", () =>
@@ -78,6 +90,11 @@ async function handleStartMeeting() {
     await sendMessage({ type: "START_MEETING_CAPTURE" });
     await refreshMeetingStatus();
   } catch (e) {
+    if (isUpgradeLimitError(e.message)) {
+      await openUpgradePage(e.message);
+      return;
+    }
+
     alert(e.message);
   }
 }

@@ -35,6 +35,32 @@ function normalizeBaseUrl(value) {
   return (trimmed || DEFAULT_SETTINGS.backendBaseUrl).replace(/\/+$/, "");
 }
 
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSameAccountEmail(existingEmail, nextEmail) {
+  const a = normalizeEmail(existingEmail);
+  const b = normalizeEmail(nextEmail);
+  return Boolean(a) && a === b;
+}
+
+function getReusableUserId(account, email) {
+  return isSameAccountEmail(account?.email, email)
+    ? String(account?.user_id || "").trim()
+    : "";
+}
+
+function getResetOrExistingAccount(account, email) {
+  if (isSameAccountEmail(account?.email, email)) {
+    return account || {};
+  }
+
+  return {
+    ...DEFAULT_SETTINGS.userAccount
+  };
+}
+
 function mergeSettings(rawSettings) {
   const merged = {
     ...DEFAULT_SETTINGS,
@@ -127,9 +153,9 @@ async function saveSettings() {
       prohibited_words: prohibitedWords
     },
     userAccount: {
-      ...(existing.userAccount || {}),
-      name: accountName,
-      email: accountEmail
+        ...getResetOrExistingAccount(existing.userAccount, accountEmail),
+        name: accountName,
+        email: accountEmail
     }
   });
 
@@ -155,21 +181,21 @@ async function connectAccount() {
 
   try {
     const user = await bootstrapAccount(backendBaseUrl, {
-      email,
-      name,
-      user_id: existing.userAccount?.user_id || ""
+        email,
+        name,
+        user_id: getReusableUserId(existing.userAccount, email)
     });
 
     const settings = mergeSettings({
-      ...existing,
-      backendBaseUrl,
-      userAccount: {
-        ...(existing.userAccount || {}),
-        ...user,
-        email,
-        name: user.name || name,
-        usage: mergeUsageCounts(existing.userAccount?.usage || {}, user.usage || {})
-      }
+        ...existing,
+        backendBaseUrl,
+        userAccount: {
+            ...DEFAULT_SETTINGS.userAccount,
+            ...user,
+            email: user.email || email,
+            name: user.name || name,
+            usage: user.usage || {}
+        }
     });
 
     await storageSet({ continuum_settings: settings });
@@ -237,38 +263,14 @@ async function requestUpgrade() {
   const settings = await getSavedSettings();
   const account = settings.userAccount || DEFAULT_SETTINGS.userAccount;
 
-  if (!UPGRADE_CONTACT_EMAIL || UPGRADE_CONTACT_EMAIL.includes("replace-with-your-email")) {
-    document.getElementById("status").textContent = "Set UPGRADE_CONTACT_EMAIL in options.js first.";
-    return;
-  }
-
   if (!account.email && !account.user_id) {
     document.getElementById("status").textContent = "Connect a beta account first.";
     return;
   }
 
-  const usage = account.usage || {};
-  const subject = encodeURIComponent(`Continuum upgrade request - ${account.email || account.user_id || "beta-user"}`);
-  const body = encodeURIComponent(
-`Hi,
-
-I'd like to request a Continuum paid upgrade.
-
-Name: ${account.name || ""}
-Email: ${account.email || ""}
-User ID: ${account.user_id || ""}
-
-Current plan: ${account.plan || "free"}
-Usage:
-- Docs: ${Number(usage.documents_generated || 0)}
-- Screenshots: ${Number(usage.screenshots_saved || 0)}
-- Meetings: ${Number(usage.meetings_uploaded || 0)}
-- External docs: ${Number(usage.external_docs_generated || 0)}
-
-Thanks.`
-  );
-
-  window.location.href = `mailto:${UPGRADE_CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+  await chrome.tabs.create({
+    url: chrome.runtime.getURL("upgrade.html")
+  });
 }
 
 async function bootstrapAccount(backendBaseUrl, account) {

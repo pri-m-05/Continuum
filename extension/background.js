@@ -99,6 +99,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
+        case "OPEN_UPGRADE_PAGE": {
+            const payload = message.payload || {};
+            const params = new URLSearchParams();
+
+            if (payload.reason) params.set("reason", payload.reason);
+
+            const query = params.toString();
+            const url = chrome.runtime.getURL(`upgrade.html${query ? `?${query}` : ""}`);
+
+            await chrome.tabs.create({ url });
+            sendResponse({ ok: true });
+            return;
+        }
+
         case "OPEN_MIC_PERMISSION_PAGE": {
           await chrome.tabs.create({ url: chrome.runtime.getURL("mic.html") });
           sendResponse({ ok: true });
@@ -1149,16 +1163,16 @@ async function syncConnectedUserStatus(preferredUser = null) {
     let user = null;
 
     if (account.email) {
-      const bootstrapped = await fetchJson(`${s.backendBaseUrl}/users/bootstrap`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: account.email || "",
-          name: account.name || "",
-          user_id: account.user_id || ""
-        })
-      });
-      user = bootstrapped?.user || null;
+        const bootstrapped = await fetchJson(`${s.backendBaseUrl}/users/bootstrap`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                email: account.email || "",
+                name: account.name || "",
+                user_id: ""
+            })
+        });
+        user = bootstrapped?.user || null;
     } else if (account.user_id) {
       const status = await fetchJson(
         `${s.backendBaseUrl}/users/status?user_id=${encodeURIComponent(account.user_id)}`,

@@ -160,6 +160,27 @@
         </div>
         <div id="latestDraft" class="list">No draft yet.</div>
       </section>
+      
+      <div id="upgradeModal" class="upgradeModalOverlay hidden" aria-hidden="true">
+        <div class="upgradeModalCard">
+            <div class="upgradeModalHeader">
+            <div>
+                <h2 id="upgradeModalTitle">Free plan limit reached</h2>
+                <p id="upgradeModalBody" class="subtle">
+                You’ve reached a free plan limit. Upgrade to continue.
+                </p>
+            </div>
+            <button id="closeUpgradeModalBtn" class="ghost utilityBtn" type="button" aria-label="Close">
+                ✕
+            </button>
+            </div>
+
+            <div class="upgradeModalActions">
+            <button id="upgradeModalCta" class="primary" type="button">Upgrade</button>
+            <button id="upgradeModalDismiss" class="ghost" type="button">Maybe later</button>
+            </div>
+        </div>
+        </div>
     </div>
 
     <script type="module" src="react-dist/preview.js"></script>
